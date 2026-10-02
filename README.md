@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Diversify
 
-## Getting Started
+> The best strategy for crypto is to hold. But are you holding the right assets?
 
-First, run the development server:
+Paste your Solana, Ethereum/L2 and Bitcoin addresses. Diversify reads your balances, scores current market
+conditions, and asks Claude to propose a target allocation through the lens of an investor philosophy
+(Munger, Buffett, Dalio, Taleb, Bogle, Cathie Wood). It then computes the trades to get there.
+
+## Run it
 
 ```bash
+cp .env.example .env.local   # add ANTHROPIC_API_KEY
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How it works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Step | Code | Source |
+|---|---|---|
+| Solana balances (SOL, SPL + Token-2022, incl. xStocks) | `src/lib/chains/solana.ts` | Solana RPC + Jupiter token API (price, tags, verification, liquidity) |
+| EVM balances (ETH, Base, Arbitrum, Optimism, Polygon) | `src/lib/chains/evm.ts` | Public RPCs, one batched call per chain over a curated token list |
+| Bitcoin balance (address or xpub/ypub/zpub) | `src/lib/chains/bitcoin.ts` | mempool.space, Trezor Blockbook for xpubs |
+| Market regime | `src/lib/market.ts` | CoinGecko (200d BTC/ETH/SOL history, dominance) + Fear & Greed index |
+| Allocation | `src/lib/advisor.ts` | Claude Opus 5.5, structured output validated with Zod |
+| Trades | `src/lib/rebalance.ts` | Deterministic diff of current vs target, ignoring moves under 1% |
 
-## Learn More
+Holdings roll up to a canonical asset (WBTC/cbBTC → BTC, JitoSOL/wstETH → SOL/ETH), so the advisor reasons
+about economic exposure, not wrappers. On Solana, unverified tokens and positions larger than 25% of the token's
+DEX liquidity are skipped as likely spam.
 
-To learn more about Next.js, take a look at the following resources:
+## Known limits / next steps
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **EVM token discovery** covers a curated list of majors. Plug in an indexer (Alchemy, Moralis) to see everything.
+- **Swap execution with a fee**: route rebalances through Jupiter (Solana, `platformFeeBps`) and 0x / 1inch (EVM)
+  with an integrator fee. The UI has a placeholder button.
+- **Backtest**: show "your portfolio vs target vs just holding BTC" over the last year to sell the thesis.
+- Public RPCs and CoinGecko's free tier are rate-limited; set the optional env vars for production.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Not financial advice. Personas are inspired by publicly known philosophies and aren't affiliated with those people.
