@@ -13,7 +13,7 @@ const USDC_TOKEN = 0;
  */
 const UNIFIED_MODES = new Set(["unifiedAccount", "portfolioMargin"]);
 
-function info<T>(body: Record<string, unknown>): Promise<T> {
+export function info<T>(body: Record<string, unknown>): Promise<T> {
   return getJson<T>(INFO_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -53,7 +53,7 @@ interface DelegatorSummary {
 }
 
 /** USD mark price and daily volume per spot token index, from its /USDC pair. */
-function spotPrices(): Promise<Map<number, { price: number; volume: number; name: string }>> {
+export function spotPrices(): Promise<Map<number, { price: number; volume: number; name: string }>> {
   return cached("hl-spot-prices", 60_000, async () => {
     const [meta, ctxs] = await info<[SpotMeta, SpotCtx[]]>({ type: "spotMetaAndAssetCtxs" });
     const ctxByPair = new Map(ctxs.map((c) => [c.coin, c]));

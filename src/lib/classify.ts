@@ -5,7 +5,9 @@ const STABLES = new Set([
   "USD1", "RLUSD", "FRAX", "LUSD", "GHO", "USDC.E", "USDBC", "AUSD",
   "USDT0", "USDH", "USDHL", "FEUSD",
 ]);
-const GOLD = new Set(["PAXG", "XAUT", "XAUT0"]);
+const GOLD = new Set(["PAXG", "XAUT", "XAUT0", "XAUM"]);
+/** Tokenized equities whose chain metadata lacks stock tags (e.g. Hyperliquid wrapped xStocks). */
+const STOCKS = new Set(["SPYX", "QQQX", "NVDAX", "AAPLX", "TSLAX", "GOOGLX", "COINX", "MSTRX", "CRCLX", "USPYX"]);
 
 /** Wrapped / staked variants that roll up to a canonical asset. */
 const ALIASES: Record<string, string> = {
@@ -15,7 +17,10 @@ const ALIASES: Record<string, string> = {
   WSOL: "SOL", USOL: "SOL", JITOSOL: "SOL", MSOL: "SOL", JUPSOL: "SOL", BSOL: "SOL",
   INF: "SOL", BNSOL: "SOL", HSOL: "SOL", DSOL: "SOL", JSOL: "SOL",
   "USDC.E": "USDC", USDBC: "USDC", USDT0: "USDT",
-  POL: "POL", MATIC: "POL", XAUT0: "XAUT",
+  POL: "POL", MATIC: "POL",
+  // Every tokenized gold is the same economic exposure.
+  PAXG: "GOLD", XAUT: "GOLD", XAUT0: "GOLD", XAUM: "GOLD",
+  USPYX: "SPYX",
 };
 
 const LARGE_CAPS = new Set([
@@ -33,7 +38,7 @@ export function classify(symbol: string, tags: string[] = []): Category {
   const asset = canonicalAsset(s);
   if (STABLES.has(s) || tags.includes("stable")) return "stablecoin";
   if (GOLD.has(s) || tags.includes("commodities")) return "tokenized-gold";
-  if (tags.includes("xstocks") || tags.includes("stocks") || tags.includes("equities"))
+  if (STOCKS.has(s) || tags.includes("xstocks") || tags.includes("stocks") || tags.includes("equities"))
     return "tokenized-stock";
   if (asset === "BTC") return "bitcoin";
   if (asset === "ETH") return "ethereum";

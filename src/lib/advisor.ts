@@ -2,26 +2,50 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod/v4";
 import { CATEGORY_LABELS } from "./classify";
-import type { Horizon, RiskLevel } from "./options";
+import { VENUES, type Horizon, type RiskLevel } from "./options";
 import type { Persona } from "./personas";
 import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
+import type { HyperliquidVenues } from "./venues";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as [Category, ...Category[]];
 
+const usdK = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${Math.round(n / 1e3)}k`);
+
 /**
- * What the advisor may recommend. Keeping the universe explicit stops the model from
- * inventing tickers and keeps every suggestion buyable on Solana or EVM DEXes.
+ * What the advisor may recommend, and where it can be bought. Keeping the universe explicit stops
+ * the model from inventing tickers and keeps every suggestion executable on a known venue.
  */
-const UNIVERSE = `
-Stablecoins: USDC, USDT
-Bitcoin: BTC (native, or cbBTC/WBTC on EVM)
-Ethereum: ETH (native or staked, e.g. wstETH)
-Solana: SOL (native or staked, e.g. JitoSOL)
-Large-cap alts: LINK, AAVE, JUP, HYPE (spot or staked on Hyperliquid)
-Tokenized gold: PAXG, XAUT
-Tokenized stocks on Solana (xStocks): SPYx (S&P 500), QQQx (Nasdaq 100), NVDAx, AAPLx, GOOGLx, TSLAx, COINx, MSTRx, CRCLx
-Speculative: any speculative token the user already holds (keep, trim or exit it; never introduce new memecoins)
-`.trim();
+function buildUniverse(venues: HyperliquidVenues | null, allowPerps: boolean): string {
+  const spotVol = (token: string) => {
+    const m = venues?.spot.find((x) => x.token === token);
+    return m ? ` (24h volume ${usdK(m.volume24hUsd)})` : "";
+  };
+  const lines = [
+    "Format: canonical asset -> where to buy it (venue: instrument). Use the canonical asset in `asset` and the exact ticker in `instrument`.",
+    "USDC, USDT -> any chain the user already holds funds on",
+    "BTC -> bitcoin: BTC | ethereum or ethereum-l2: cbBTC/WBTC | hyperliquid-spot: UBTC",
+    "ETH -> ethereum or ethereum-l2: ETH or wstETH (staked) | hyperliquid-spot: UETH",
+    "SOL -> solana: SOL or JitoSOL (staked)",
+    "LINK, AAVE -> ethereum | JUP -> solana | HYPE -> hyperliquid-spot: HYPE (can be staked)",
+    `GOLD -> hyperliquid-spot: XAUT0${spotVol("XAUT0")} | ethereum: PAXG or XAUT | solana: PAXG`,
+    "Tokenized stocks (canonical = xStock ticker in caps, e.g. SPYX, QQQX, NVDAX, AAPLX, GOOGLX, TSLAX, COINX, MSTRX, CRCLX) ->",
+    "  solana: SPYx, QQQx, NVDAx, AAPLx, GOOGLx, TSLAx, COINx, MSTRx, CRCLx (xStocks; deepest spot liquidity)",
+    `  hyperliquid-spot: SPYX${spotVol("SPYX")}, NVDAX${spotVol("NVDAX")}, QQQX${spotVol("QQQX")} (thin; only for small sizes)`,
+    "Speculative -> only tokens the user already holds (keep, trim or exit; never introduce new memecoins)",
+  ];
+  if (allowPerps && venues?.perps.length) {
+    lines.push(
+      "Perps (user opted in) -> hyperliquid-perp, 1x long only, canonical asset = market + \"-PERP\":",
+      ...venues.perps.map(
+        (p) =>
+          `  ${p.market}-PERP (instrument xyz:${p.market}): 24h volume ${usdK(p.volume24hUsd)}, a 1x long currently pays ${p.longFundingApr.toFixed(1)}%/yr funding`,
+      ),
+    );
+  } else {
+    lines.push("Perps: NOT allowed. Never use venue hyperliquid-perp.");
+  }
+  return lines.join("\n");
+}
 
 export const AdviceSchema = z.object({
   verdict: z.string().describe("One punchy sentence answering: is the user holding the right assets?"),
@@ -33,7 +57,9 @@ export const AdviceSchema = z.object({
   allocations: z
     .array(
       z.object({
-        asset: z.string().describe("Canonical symbol from the investable universe, e.g. BTC, SOL, USDC, SPYx"),
+        asset: z.string().describe("Canonical asset from the investable universe, e.g. BTC, SOL, USDC, GOLD, SPYX, SP500-PERP"),
+        venue: z.enum(VENUES).describe("Where to buy or hold it"),
+        instrument: z.string().describe("Exact token or market to buy on that venue, e.g. XAUT0, SPYx, cbBTC, xyz:SP500"),
         category: z.enum(CATEGORIES),
         targetPct: z.number().describe("Percent of total portfolio; all allocations sum to 100"),
         role: z.enum(["defensive", "core", "growth", "speculative"]),
@@ -52,7 +78,9 @@ export interface AdviceRequest {
   persona: Persona;
   risk: RiskLevel;
   horizon: Horizon;
+  allowPerps: boolean;
   market: MarketSnapshot;
+  venues: HyperliquidVenues | null;
 }
 
 function describePortfolio(holdings: Holding[]): string {
@@ -106,7 +134,9 @@ You analyze a user's on-chain holdings and propose a target allocation that a lo
 
 Rules:
 - Reason through the lens of the selected investor's publicly known philosophy. You are inspired by them; never claim to be them or invent quotes.
-- Pick only from the investable universe given. Use canonical symbols (BTC not WBTC, SOL not JitoSOL).
+- Pick only from the investable universe given. Use canonical assets (BTC not WBTC, SOL not JitoSOL, GOLD not PAXG) and name the venue and exact instrument for each.
+- Choose venues to minimize friction: prefer a venue where the user already holds that asset or the stablecoins to fund it, so no bridging is needed. Override this when that venue's daily volume is too thin for the order (avoid orders above ~5% of 24h volume).
+- This is a buy-and-hold app: own spot assets. Only if perps are allowed, use a 1x long perp where it clearly beats spot (spot too illiquid or unavailable, or a short horizon), state its annual funding cost in the rationale, and keep perps a minority of the portfolio.
 - Respect the user's risk tolerance and horizon; let current market conditions tilt the allocation (e.g. more stablecoins in euphoric or downtrending markets, more risk when fear is extreme and trend is turning up), but the persona's philosophy dominates.
 - Prefer fewer, larger positions over many tiny ones. Minimize unnecessary trades, since every swap costs fees and active trading rarely beats holding.
 - Percentages must sum to exactly 100.
@@ -131,7 +161,7 @@ Market conditions:
 ${describeMarket(req.market)}
 
 Investable universe:
-${UNIVERSE}
+${buildUniverse(req.venues, req.allowPerps)}
 
 Diagnose the current portfolio and propose the target allocation.`;
 

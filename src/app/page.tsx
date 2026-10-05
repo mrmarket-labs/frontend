@@ -58,6 +58,7 @@ export default function Home() {
   const [personaId, setPersonaId] = useState(PERSONAS[0].id);
   const [risk, setRisk] = useState<RiskLevel>("balanced");
   const [horizon, setHorizon] = useState<Horizon>("3+ years");
+  const [allowPerps, setAllowPerps] = useState(false);
   const [advising, setAdvising] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
   const [result, setResult] = useState<{ advice: Advice; trades: Trade[]; personaId: string } | null>(null);
@@ -108,6 +109,7 @@ export default function Home() {
         personaId,
         risk,
         horizon,
+        allowPerps,
       });
       setMarket(data.market);
       setResult({ advice: data.advice, trades: data.trades, personaId });
@@ -199,6 +201,18 @@ export default function Home() {
             <Segmented options={RISK_LEVELS} value={risk} onChange={setRisk} />
             <p className="mt-4 mb-1.5 text-xs text-muted">Horizon</p>
             <Segmented options={HORIZONS} value={horizon} onChange={setHorizon} />
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={allowPerps}
+                onChange={(e) => setAllowPerps(e.target.checked)}
+                className="mt-0.5 size-4 accent-[var(--accent)]"
+              />
+              <span>
+                Allow perps
+                <span className="block text-xs text-muted">1x longs on Hyperliquid (S&amp;P 500, Nasdaq, gold) when spot is too thin. They pay ongoing funding fees.</span>
+              </span>
+            </label>
             <button
               onClick={advise}
               disabled={advising || portfolio.holdings.length === 0}

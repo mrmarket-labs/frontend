@@ -1,4 +1,5 @@
 import type { Advice } from "./advisor";
+import type { Venue } from "./options";
 import type { Holding } from "./types";
 
 export interface Trade {
@@ -9,6 +10,9 @@ export interface Trade {
   targetPct: number;
   /** Where the user currently holds the asset, e.g. "JitoSOL on solana". */
   heldAs: string[];
+  /** For buys: where and what to buy. */
+  venue?: Venue;
+  instrument?: string;
 }
 
 /** Skip trades smaller than this share of the portfolio: the fees aren't worth it. */
@@ -43,6 +47,8 @@ export function computeTrades(holdings: Holding[], advice: Advice): Trade[] {
       currentPct,
       targetPct,
       heldAs: cur ? [...cur.heldAs] : [],
+      venue: target?.venue,
+      instrument: target?.instrument,
     });
   }
   // Sells first: they fund the buys.

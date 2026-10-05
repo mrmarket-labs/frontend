@@ -1,4 +1,5 @@
 import type { Advice } from "@/lib/advisor";
+import { VENUE_LABELS } from "@/lib/options";
 import type { Persona } from "@/lib/personas";
 import type { Trade } from "@/lib/rebalance";
 import type { Holding } from "@/lib/types";
@@ -69,6 +70,9 @@ export function AdviceView({ advice, trades, holdings, persona }: {
                   <span className={`text-[11px] uppercase tracking-wider ${ROLE_STYLES[a.role]}`}>{a.role}</span>
                 </div>
                 <span className="num text-lg">{pct(a.targetPct, 0)}</span>
+                <p className="col-span-2 mt-0.5 text-xs text-muted">
+                  via <span className="font-mono text-ink/80">{a.instrument}</span> on {VENUE_LABELS[a.venue]}
+                </p>
                 <p className="col-span-2 mt-1 text-sm text-muted">{a.rationale}</p>
               </li>
             ))}
@@ -97,7 +101,10 @@ export function AdviceView({ advice, trades, holdings, persona }: {
                     </div>
                     <p className="num mt-1 text-xs text-muted">
                       {pct(t.currentPct)} → {pct(t.targetPct)}
-                      {t.heldAs.length > 0 && <span className="font-sans"> · {t.heldAs.join(", ")}</span>}
+                      {t.action === "sell" && t.heldAs.length > 0 && <span className="font-sans"> · {t.heldAs.join(", ")}</span>}
+                      {t.action === "buy" && t.venue && (
+                        <span className="font-sans"> · {t.instrument} on {VENUE_LABELS[t.venue]}</span>
+                      )}
                     </p>
                   </li>
                 ))}

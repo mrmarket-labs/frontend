@@ -6,6 +6,7 @@ import { getMarketSnapshot } from "@/lib/market";
 import { HORIZONS, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
 import { rateLimit } from "@/lib/rate-limit";
+import { getHyperliquidVenues } from "@/lib/venues";
 import { computeTrades } from "@/lib/rebalance";
 import type { Category } from "@/lib/types";
 
@@ -17,6 +18,7 @@ const RequestSchema = z.object({
   personaId: z.string(),
   risk: z.enum(RISK_LEVELS),
   horizon: z.enum(HORIZONS),
+  allowPerps: z.boolean().default(false),
   holdings: z
     .array(
       z.object({
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
-  const { personaId, risk, horizon, holdings, positions } = parsed.data;
+  const { personaId, risk, horizon, allowPerps, holdings, positions } = parsed.data;
   const persona = getPersona(personaId);
   if (!persona) return Response.json({ error: "Unknown investor persona." }, { status: 400 });
 
@@ -68,8 +70,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Set ANTHROPIC_API_KEY in .env.local to enable the advisor." }, { status: 500 });
 
   try {
-    const market = await getMarketSnapshot();
-    const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, market });
+    const [market, venues] = await Promise.all([getMarketSnapshot(), getHyperliquidVenues()]);
+    const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, allowPerps, market, venues });
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError)
