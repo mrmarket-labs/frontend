@@ -31,6 +31,9 @@ export interface Holding {
   priceUsd: number;
   valueUsd: number;
   logo?: string;
+  /** Mint (Solana) or contract address / "native" (EVM). Absent where the app can't swap yet. */
+  tokenAddress?: string;
+  decimals?: number;
 }
 
 export interface ScanError {

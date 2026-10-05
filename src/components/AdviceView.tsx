@@ -32,11 +32,13 @@ function RiskMeter({ label, score }: { label: string; score: number }) {
   );
 }
 
-export function AdviceView({ advice, trades, holdings, persona }: {
+export function AdviceView({ advice, trades, holdings, persona, plan }: {
   advice: Advice;
   trades: Trade[];
   holdings: Holding[];
   persona: Persona;
+  /** Executable rebalance plan; when given it replaces the plain trade list. */
+  plan?: React.ReactNode;
 }) {
   const current = sliceBy(holdings, (h) => h.category, (h) => h.valueUsd);
   const target = sliceBy(advice.allocations, (a) => a.category, (a) => a.targetPct);
@@ -63,7 +65,7 @@ export function AdviceView({ advice, trades, holdings, persona }: {
           </div>
           <ul className="mt-6 divide-y divide-line">
             {advice.allocations.map((a) => (
-              <li key={a.asset} className="grid grid-cols-[1fr_auto] gap-x-4 py-3">
+              <li key={`${a.asset}-${a.venue}-${a.instrument}`} className="grid grid-cols-[1fr_auto] gap-x-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="size-2 rounded-full" style={{ background: CATEGORY_COLORS[a.category] }} />
                   <span className="font-medium">{a.asset}</span>
@@ -79,8 +81,10 @@ export function AdviceView({ advice, trades, holdings, persona }: {
           </ul>
         </Panel>
 
-        <Panel kicker="Suggested trades" title="Rebalance once, then hold" className="lg:col-span-2">
-          {trades.length === 0 ? (
+        <Panel kicker={plan ? "Rebalance plan" : "Suggested trades"} title="Rebalance once, then hold" className="lg:col-span-2">
+          {plan ? (
+            plan
+          ) : trades.length === 0 ? (
             <p className="text-sm text-muted">You&apos;re already within 1% of the target. Keep holding.</p>
           ) : (
             <>

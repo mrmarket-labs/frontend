@@ -109,7 +109,7 @@ function toUnits(hex: string | undefined, decimals: number): number {
 }
 
 /** One JSON-RPC batch per chain: native balance + balanceOf for every curated token. */
-async function scanChain(cfg: EvmChain, address: string): Promise<{ token: Omit<Token, "address">; amount: number }[]> {
+async function scanChain(cfg: EvmChain, address: string): Promise<{ token: Omit<Token, "address">; tokenAddress: string; amount: number }[]> {
   const data = BALANCE_OF + address.slice(2).toLowerCase().padStart(64, "0");
   const calls = [
     { jsonrpc: "2.0", id: 0, method: "eth_getBalance", params: [address, "latest"] },
@@ -128,6 +128,7 @@ async function scanChain(cfg: EvmChain, address: string): Promise<{ token: Omit<
   const byId = new Map(results.map((r) => [r.id, r.result]));
   return [cfg.native, ...cfg.tokens].map((token, i) => ({
     token,
+    tokenAddress: i === 0 ? "native" : cfg.tokens[i - 1].address,
     amount: toUnits(byId.get(i), token.decimals),
   }));
 }
@@ -135,7 +136,7 @@ async function scanChain(cfg: EvmChain, address: string): Promise<{ token: Omit<
 export async function scanEvm(address: string): Promise<{ holdings: Holding[]; failedChains: { chain: Chain; reason: string }[] }> {
   const settled = await Promise.allSettled(EVM_CHAINS.map((cfg) => scanChain(cfg, address)));
   const failedChains: { chain: Chain; reason: string }[] = [];
-  const found: { chain: Chain; token: Omit<Token, "address">; amount: number }[] = [];
+  const found: { chain: Chain; token: Omit<Token, "address">; tokenAddress: string; amount: number }[] = [];
   settled.forEach((r, i) => {
     if (r.status === "rejected")
       failedChains.push({ chain: EVM_CHAINS[i].chain, reason: r.reason instanceof Error ? r.reason.message : String(r.reason) });
@@ -143,7 +144,7 @@ export async function scanEvm(address: string): Promise<{ holdings: Holding[]; f
   });
 
   const prices = await coingeckoPrices(found.map((f) => f.token.coingeckoId));
-  const holdings = found.flatMap(({ chain, token, amount }): Holding[] => {
+  const holdings = found.flatMap(({ chain, token, tokenAddress, amount }): Holding[] => {
     const priceUsd = prices[token.coingeckoId] ?? 0;
     const valueUsd = amount * priceUsd;
     if (valueUsd < MIN_VALUE_USD) return [];
@@ -157,6 +158,8 @@ export async function scanEvm(address: string): Promise<{ holdings: Holding[]; f
       amount,
       priceUsd,
       valueUsd,
+      tokenAddress,
+      decimals: token.decimals,
     }];
   });
   return { holdings, failedChains };

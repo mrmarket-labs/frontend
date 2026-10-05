@@ -1,26 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AdviceView } from "@/components/AdviceView";
 import { MarketPanel } from "@/components/MarketPanel";
+import { PlanView } from "@/components/PlanView";
 import { PortfolioView } from "@/components/PortfolioView";
+import { ReviewSheet } from "@/components/ReviewSheet";
 import { Panel, Spinner } from "@/components/ui";
+import { WalletsPanel } from "@/components/WalletsPanel";
 import type { Advice } from "@/lib/advisor";
 import { HORIZONS, RISK_LEVELS, type Horizon, type RiskLevel } from "@/lib/options";
 import { PERSONAS } from "@/lib/personas";
+import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
 import type { Trade } from "@/lib/rebalance";
-import type { MarketSnapshot, PortfolioResponse } from "@/lib/types";
+import type { Holding, MarketSnapshot, PortfolioResponse } from "@/lib/types";
+import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progress";
+import { useWallets } from "@/lib/wallets/useWallets";
 
-const STORAGE_KEY = "diversify:addresses";
-const LEGACY_STORAGE_KEY = "holdwise:addresses";
-
-function detectChain(address: string): string | null {
-  if (/^0x[0-9a-fA-F]{40}$/.test(address)) return "EVM · ETH, Base, Arbitrum, Optimism, Polygon, Hyperliquid";
-  if (/^[xyz]pub[1-9A-HJ-NP-Za-km-z]{100,112}$/.test(address)) return "Bitcoin wallet (all addresses)";
-  if (/^(bc1[02-9ac-hj-np-z]{11,87}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/.test(/^bc1/i.test(address) ? address.toLowerCase() : address))
-    return address.toLowerCase().startsWith("bc1p") ? "Bitcoin (Taproot)" : "Bitcoin";
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) return "Solana";
-  return null;
+interface Result {
+  advice: Advice;
+  trades: Trade[];
+  /** Holdings the plan was built from; the plan stays fixed while the portfolio view refreshes. */
+  holdings: Holding[];
+  steps: Step[];
+  personaId: string;
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -47,7 +50,7 @@ function Segmented<T extends string>({ options, value, onChange }: { options: re
 }
 
 export default function Home() {
-  const [addressText, setAddressText] = useState("");
+  const wallets = useWallets();
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -61,15 +64,16 @@ export default function Home() {
   const [allowPerps, setAllowPerps] = useState(false);
   const [advising, setAdvising] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ advice: Advice; trades: Trade[]; personaId: string } | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
+
+  const [progress, setProgress] = useState<Progress>({});
+  const [review, setReview] = useState<SwapStep | null>(null);
+  const [pickerSignal, setPickerSignal] = useState(0);
+  const walletsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
-      // Read after mount (not in a lazy initializer) so server and client markup match.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved) setAddressText(saved);
-    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProgress(loadProgress());
     fetch("/api/market")
       .then(async (r) => {
         const data = await r.json();
@@ -79,24 +83,25 @@ export default function Home() {
       .catch((e) => setMarketError(`Market data unavailable: ${e.message}`));
   }, []);
 
-  const lines = addressText.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+  const addresses = wallets.allAddresses;
   const persona = PERSONAS.find((p) => p.id === personaId)!;
 
-  async function scan() {
-    setScanning(true);
-    setScanError(null);
-    setResult(null);
-    try {
-      localStorage.setItem(STORAGE_KEY, addressText);
-    } catch {}
-    try {
-      setPortfolio(await postJson<PortfolioResponse>("/api/portfolio", { addresses: addressText }));
-    } catch (e) {
-      setScanError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setScanning(false);
-    }
-  }
+  const scan = useCallback(
+    async (quiet = false) => {
+      if (addresses.length === 0) return;
+      setScanning(true);
+      setScanError(null);
+      if (!quiet) setResult(null);
+      try {
+        setPortfolio(await postJson<PortfolioResponse>("/api/portfolio", { addresses: addresses.join("\n") }));
+      } catch (e) {
+        setScanError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setScanning(false);
+      }
+    },
+    [addresses],
+  );
 
   async function advise() {
     if (!portfolio) return;
@@ -112,7 +117,16 @@ export default function Home() {
         allowPerps,
       });
       setMarket(data.market);
-      setResult({ advice: data.advice, trades: data.trades, personaId });
+      setResult({
+        advice: data.advice,
+        trades: data.trades,
+        holdings: portfolio.holdings,
+        steps: compilePlan(portfolio.holdings, data.trades),
+        personaId,
+      });
+      // A fresh plan starts from zero.
+      setProgress({});
+      saveProgress({});
     } catch (e) {
       setAdviceError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -120,59 +134,49 @@ export default function Home() {
     }
   }
 
+  function markDone(step: Step, txId?: string) {
+    const next: Progress = { ...progress, [step.id]: { status: "done", txId, manual: step.kind === "manual", at: Date.now() } };
+    setProgress(next);
+    saveProgress(next);
+    if (step.kind === "swap") void scan(true);
+  }
+
+  function openConnect() {
+    setPickerSignal((n) => n + 1);
+    walletsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const reviewWallet = review ? wallets.walletFor(review.address) : undefined;
+
   return (
-    <main className="relative mx-auto w-full max-w-6xl px-4 pb-24 pt-10 sm:px-6 sm:pt-14">
-      <nav className="mb-12 flex items-center justify-between">
+    <main className="relative mx-auto w-full max-w-6xl px-4 pb-24 pt-8 sm:px-6 sm:pt-14">
+      <nav className="mb-10 flex items-center justify-between sm:mb-12">
         <span className="font-serif text-2xl">Diversify</span>
-        <span className="text-xs text-muted">Educational analysis, not financial advice</span>
+        <span className="text-xs text-muted">
+          <span className="hidden sm:inline">Educational analysis, </span>not financial advice
+        </span>
       </nav>
 
       <header className="max-w-3xl">
-        <h1 className="font-serif text-5xl leading-[1.02] tracking-tight sm:text-7xl">
+        <h1 className="font-serif text-4xl leading-[1.02] tracking-tight sm:text-7xl">
           The best crypto strategy is to hold. <em className="text-accent">Are you holding the right assets?</em>
         </h1>
         <p className="mt-5 max-w-xl text-muted">
-          Paste your wallets, pick a legendary investor&apos;s lens, and get a target allocation tuned to today&apos;s market, plus the trades to get there.
+          Connect your wallets, pick a legendary investor&apos;s lens, and get a target allocation tuned to today&apos;s market, plus the swaps to get
+          there, signed by you.
         </p>
       </header>
 
-      <div className="mt-12 grid gap-5 lg:grid-cols-3">
-        <Panel kicker="Step 1" title="Your wallets" className="lg:col-span-2">
-          <textarea
-            value={addressText}
-            onChange={(e) => setAddressText(e.target.value)}
-            rows={4}
-            spellCheck={false}
-            placeholder={"One per line: Solana, Ethereum/L2/Hyperliquid (0x…), Bitcoin address (bc1…) or Bitcoin xpub/zpub"}
-            className="w-full resize-y rounded-xl border border-line bg-bg/60 p-3.5 font-mono text-sm outline-none placeholder:text-muted/70 focus:border-accent/60"
-          />
-          {lines.length > 0 && (
-            <ul className="mt-3 space-y-1 text-xs">
-              {lines.map((a) => {
-                const chain = detectChain(a);
-                return (
-                  <li key={a} className="flex items-center gap-2">
-                    <span className="font-mono text-muted">{a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a}</span>
-                    <span className={chain ? "text-accent" : "text-danger"}>{chain ?? "unrecognized"}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={scan}
-              disabled={scanning || lines.length === 0}
-              className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 font-medium text-bg transition hover:brightness-110 disabled:opacity-40"
-            >
-              {scanning && <Spinner />}
-              {scanning ? "Scanning chains…" : "Analyze portfolio"}
-            </button>
-            <span className="text-xs text-muted">Read-only. No wallet connection, no keys.</span>
-          </div>
-          {scanError && <p className="mt-3 text-sm text-danger">{scanError}</p>}
-        </Panel>
-
+      <div ref={walletsRef} className="mt-10 grid scroll-mt-6 gap-5 sm:mt-12 lg:grid-cols-3">
+        <WalletsPanel
+          api={wallets}
+          holdings={portfolio?.holdings ?? []}
+          scanned={portfolio != null}
+          scanning={scanning}
+          scanError={scanError}
+          onScan={() => void scan()}
+          openPickerSignal={pickerSignal}
+        />
         <MarketPanel market={market} error={marketError} />
       </div>
 
@@ -188,9 +192,7 @@ export default function Home() {
                 <button
                   key={p.id}
                   onClick={() => setPersonaId(p.id)}
-                  className={`rounded-xl border p-3 text-left transition ${
-                    p.id === personaId ? "border-accent bg-accent/10" : "border-line hover:border-muted"
-                  }`}
+                  className={`rounded-xl border p-3 text-left transition ${p.id === personaId ? "border-accent bg-accent/10" : "border-line hover:border-muted"}`}
                 >
                   <span className="block text-sm font-medium">{p.name}</span>
                   <span className="mt-0.5 block text-xs leading-snug text-muted">{p.tagline}</span>
@@ -202,12 +204,7 @@ export default function Home() {
             <p className="mt-4 mb-1.5 text-xs text-muted">Horizon</p>
             <Segmented options={HORIZONS} value={horizon} onChange={setHorizon} />
             <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm">
-              <input
-                type="checkbox"
-                checked={allowPerps}
-                onChange={(e) => setAllowPerps(e.target.checked)}
-                className="mt-0.5 size-4 accent-[var(--accent)]"
-              />
+              <input type="checkbox" checked={allowPerps} onChange={(e) => setAllowPerps(e.target.checked)} className="mt-0.5 size-4 accent-[var(--accent)]" />
               <span>
                 Allow perps
                 <span className="block text-xs text-muted">1x longs on Hyperliquid (S&amp;P 500, Nasdaq, gold) when spot is too thin. They pay ongoing funding fees.</span>
@@ -232,16 +229,39 @@ export default function Home() {
           <AdviceView
             advice={result.advice}
             trades={result.trades}
-            holdings={portfolio.holdings}
+            holdings={result.holdings}
             persona={PERSONAS.find((p) => p.id === result.personaId)!}
+            plan={
+              <PlanView
+                steps={result.steps}
+                wallets={wallets}
+                progress={progress}
+                onReview={setReview}
+                onMarkDone={(step) => markDone(step)}
+                onConnect={openConnect}
+              />
+            }
           />
         </div>
       )}
 
+      {review && reviewWallet && (
+        <ReviewSheet
+          step={review}
+          wallet={reviewWallet}
+          onClose={() => setReview(null)}
+          onDone={(txId) => {
+            markDone(review, txId);
+            setReview(null);
+          }}
+        />
+      )}
+
       <footer className="mt-16 border-t border-line pt-6 text-xs leading-relaxed text-muted">
-        Diversify analyzes public on-chain balances and market data to produce educational allocation ideas. Investor personas are inspired by publicly
-        known philosophies and are not affiliated with or endorsed by those people. Nothing here is financial advice; crypto and tokenized assets can lose
-        all their value.
+        Diversify analyzes public on-chain balances and market data to produce educational allocation ideas. Swaps are routed through Jupiter and 0x and
+        signed in your own wallet; Diversify charges a 0.5% fee on them and never holds your funds. Investor personas are inspired by publicly known
+        philosophies and are not affiliated with or endorsed by those people. Nothing here is financial advice; crypto and tokenized assets can lose all
+        their value.
       </footer>
     </main>
   );

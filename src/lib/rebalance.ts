@@ -30,7 +30,20 @@ export function computeTrades(holdings: Holding[], advice: Advice): Trade[] {
     entry.heldAs.add(`${h.symbol} on ${h.chain}`);
     current.set(key, entry);
   }
-  const targets = new Map(advice.allocations.map((a) => [a.asset.toUpperCase(), a]));
+  // The advisor may split one asset across venues (native BTC + cbBTC). Sum the target and
+  // route the buy to the venue the app can execute on, or failing that the largest slice.
+  const EXECUTABLE = new Set(["solana", "ethereum", "ethereum-l2"]);
+  const targets = new Map<string, Advice["allocations"][number]>();
+  for (const a of advice.allocations) {
+    const key = a.asset.toUpperCase();
+    const prev = targets.get(key);
+    if (!prev) {
+      targets.set(key, { ...a });
+      continue;
+    }
+    const preferNew = EXECUTABLE.has(a.venue) && (!EXECUTABLE.has(prev.venue) || a.targetPct > prev.targetPct);
+    targets.set(key, { ...(preferNew ? a : prev), targetPct: prev.targetPct + a.targetPct });
+  }
 
   const trades: Trade[] = [];
   for (const key of new Set([...current.keys(), ...targets.keys()])) {

@@ -1,5 +1,6 @@
 import { CATEGORY_LABELS } from "@/lib/classify";
-import type { Category, Chain } from "@/lib/types";
+import type { Category } from "@/lib/types";
+export { CHAIN_LABELS } from "@/lib/chain-labels";
 
 export const CATEGORY_COLORS: Record<Category, string> = {
   stablecoin: "#9db4c8",
@@ -10,18 +11,6 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   "tokenized-stock": "#8ed47e",
   "tokenized-gold": "#d9bd5c",
   speculative: "#ef6a5e",
-};
-
-export const CHAIN_LABELS: Record<Chain, string> = {
-  solana: "Solana",
-  bitcoin: "Bitcoin",
-  ethereum: "Ethereum",
-  base: "Base",
-  arbitrum: "Arbitrum",
-  optimism: "Optimism",
-  polygon: "Polygon",
-  hyperliquid: "Hyperliquid",
-  hyperevm: "HyperEVM",
 };
 
 export const usd = (n: number) =>

@@ -21,6 +21,7 @@ interface JupToken {
   usdPrice?: number;
   isVerified?: boolean;
   liquidity?: number;
+  decimals: number;
 }
 
 interface TokenAccount {
@@ -94,6 +95,8 @@ export async function scanSolana(address: string): Promise<{ holdings: Holding[]
       priceUsd: token.usdPrice,
       valueUsd,
       logo: token.icon,
+      tokenAddress: mint,
+      decimals: mint === WSOL_MINT ? 9 : token.decimals,
     });
   }
   return { holdings, ignored };

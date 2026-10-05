@@ -26,12 +26,12 @@ export function PortfolioView({ portfolio }: { portfolio: PortfolioResponse }) {
 
       {holdings.length > 0 && (
         <div className="-mx-1 mt-6 overflow-x-auto">
-          <table className="w-full min-w-[480px] text-sm">
+          <table className="w-full min-w-[320px] text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-muted">
                 <th className="px-1 pb-2 font-normal">Asset</th>
                 <th className="px-1 pb-2 font-normal">Chain</th>
-                <th className="px-1 pb-2 font-normal">Type</th>
+                <th className="hidden px-1 pb-2 font-normal sm:table-cell">Type</th>
                 <th className="px-1 pb-2 text-right font-normal">Value</th>
                 <th className="px-1 pb-2 text-right font-normal">Weight</th>
               </tr>
@@ -51,14 +51,15 @@ export function PortfolioView({ portfolio }: { portfolio: PortfolioResponse }) {
                     </div>
                   </td>
                   <td className="px-1 py-2 text-muted">{CHAIN_LABELS[h.chain]}</td>
-                  <td className="px-1 py-2 text-muted">{CATEGORY_LABELS[h.category]}</td>
+                  <td className="hidden px-1 py-2 text-muted sm:table-cell">{CATEGORY_LABELS[h.category]}</td>
                   <td className="num px-1 py-2 text-right">{usd(h.valueUsd)}</td>
                   <td className="num px-1 py-2 text-right text-muted">{pct((h.valueUsd / totalUsd) * 100)}</td>
                 </tr>
               ))}
               {rest.length > 0 && (
                 <tr className="border-t border-line text-muted">
-                  <td className="px-1 py-2" colSpan={3}>+ {rest.length} smaller positions</td>
+                  <td className="px-1 py-2" colSpan={2}>+ {rest.length} smaller positions</td>
+                  <td className="hidden sm:table-cell" />
                   <td className="num px-1 py-2 text-right">{usd(rest.reduce((s, h) => s + h.valueUsd, 0))}</td>
                   <td />
                 </tr>
@@ -78,7 +79,7 @@ export function PortfolioView({ portfolio }: { portfolio: PortfolioResponse }) {
           </div>
           <p className="mt-1 text-xs text-muted">Margin is already counted above; this is extra exposure on top.</p>
           <div className="-mx-1 mt-2 overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
+            <table className="w-full min-w-[320px] text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-muted">
                   <th className="px-1 pb-2 font-normal">Market</th>
