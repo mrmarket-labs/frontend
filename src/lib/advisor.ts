@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 import { CATEGORY_LABELS } from "./classify";
 import type { Horizon, RiskLevel } from "./options";
 import type { Persona } from "./personas";
-import type { Category, Holding, MarketSnapshot } from "./types";
+import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as [Category, ...Category[]];
 
@@ -17,7 +17,7 @@ Stablecoins: USDC, USDT
 Bitcoin: BTC (native, or cbBTC/WBTC on EVM)
 Ethereum: ETH (native or staked, e.g. wstETH)
 Solana: SOL (native or staked, e.g. JitoSOL)
-Large-cap alts: LINK, AAVE, JUP, HYPE
+Large-cap alts: LINK, AAVE, JUP, HYPE (spot or staked on Hyperliquid)
 Tokenized gold: PAXG, XAUT
 Tokenized stocks on Solana (xStocks): SPYx (S&P 500), QQQx (Nasdaq 100), NVDAx, AAPLx, GOOGLx, TSLAx, COINx, MSTRx, CRCLx
 Speculative: any speculative token the user already holds (keep, trim or exit it; never introduce new memecoins)
@@ -48,6 +48,7 @@ export type Advice = z.infer<typeof AdviceSchema>;
 
 export interface AdviceRequest {
   holdings: Holding[];
+  positions: PerpPosition[];
   persona: Persona;
   risk: RiskLevel;
   horizon: Horizon;
@@ -69,6 +70,18 @@ function describePortfolio(holdings: Holding[]): string {
       `- ${asset} [${e.category}]: $${e.value.toFixed(0)} (${((e.value / total) * 100).toFixed(1)}%) held as ${[...e.where].join(", ")}`,
     );
   return `Total: $${total.toFixed(0)}\n${lines.join("\n")}`;
+}
+
+function describePositions(positions: PerpPosition[], holdings: Holding[]): string {
+  if (positions.length === 0) return "None.";
+  const total = holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
+  const notional = positions.reduce((s, p) => s + p.notionalUsd, 0);
+  const lines = positions.map(
+    (p) =>
+      `- ${p.side.toUpperCase()} ${p.coin} perp on ${p.venue}: $${p.notionalUsd.toFixed(0)} notional at ${p.leverage}x, ` +
+      `unrealized PnL $${p.unrealizedPnlUsd.toFixed(0)}${p.liquidationPx ? `, liquidation at $${p.liquidationPx}` : ""}`,
+  );
+  return `Total notional $${notional.toFixed(0)} (${(notional / total).toFixed(2)}x the portfolio's net value)\n${lines.join("\n")}`;
 }
 
 function describeMarket(m: MarketSnapshot): string {
@@ -97,6 +110,7 @@ Rules:
 - Respect the user's risk tolerance and horizon; let current market conditions tilt the allocation (e.g. more stablecoins in euphoric or downtrending markets, more risk when fear is extreme and trend is turning up), but the persona's philosophy dominates.
 - Prefer fewer, larger positions over many tiny ones. Minimize unnecessary trades, since every swap costs fees and active trading rarely beats holding.
 - Percentages must sum to exactly 100.
+- Leveraged perp positions are exposure on top of the holdings (their margin is already inside the holdings). Account for them in the diagnosis, risk scores and risks, and say plainly whether the persona would keep, reduce or close them. Allocations cover holdings only; never allocate to perps.
 - Be direct and specific. This is educational analysis, not personalized financial advice.`;
 
 export async function generateAdvice(req: AdviceRequest): Promise<Advice> {
@@ -109,6 +123,9 @@ User horizon: ${req.horizon}
 
 Current portfolio:
 ${describePortfolio(req.holdings)}
+
+Open leveraged perp positions:
+${describePositions(req.positions, req.holdings)}
 
 Market conditions:
 ${describeMarket(req.market)}

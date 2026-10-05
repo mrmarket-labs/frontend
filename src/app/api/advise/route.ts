@@ -11,7 +11,7 @@ import type { Category } from "@/lib/types";
 
 export const maxDuration = 300;
 
-const ADVICE_PER_HOUR = Number(process.env.ADVICE_PER_HOUR ?? 10);
+const ADVICE_PER_HOUR = Number(process.env.ADVICE_PER_HOUR || 10);
 
 const RequestSchema = z.object({
   personaId: z.string(),
@@ -20,7 +20,7 @@ const RequestSchema = z.object({
   holdings: z
     .array(
       z.object({
-        chain: z.enum(["solana", "bitcoin", "ethereum", "base", "arbitrum", "optimism", "polygon"]),
+        chain: z.enum(["solana", "bitcoin", "ethereum", "base", "arbitrum", "optimism", "polygon", "hyperliquid", "hyperevm"]),
         address: z.string(),
         symbol: z.string(),
         name: z.string(),
@@ -34,6 +34,20 @@ const RequestSchema = z.object({
     )
     .min(1)
     .max(500),
+  positions: z
+    .array(
+      z.object({
+        venue: z.literal("hyperliquid"),
+        coin: z.string(),
+        side: z.enum(["long", "short"]),
+        notionalUsd: z.number(),
+        leverage: z.number(),
+        unrealizedPnlUsd: z.number(),
+        liquidationPx: z.number().nullable(),
+      }),
+    )
+    .max(200)
+    .default([]),
 });
 
 export async function POST(request: Request) {
@@ -46,7 +60,7 @@ export async function POST(request: Request) {
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
-  const { personaId, risk, horizon, holdings } = parsed.data;
+  const { personaId, risk, horizon, holdings, positions } = parsed.data;
   const persona = getPersona(personaId);
   if (!persona) return Response.json({ error: "Unknown investor persona." }, { status: 400 });
 
@@ -55,7 +69,7 @@ export async function POST(request: Request) {
 
   try {
     const market = await getMarketSnapshot();
-    const advice = await generateAdvice({ holdings, persona, risk, horizon, market });
+    const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, market });
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError)

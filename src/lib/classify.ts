@@ -3,17 +3,18 @@ import type { Category } from "./types";
 const STABLES = new Set([
   "USDC", "USDT", "DAI", "USDS", "PYUSD", "USDE", "FDUSD", "TUSD", "USDG",
   "USD1", "RLUSD", "FRAX", "LUSD", "GHO", "USDC.E", "USDBC", "AUSD",
+  "USDT0", "USDH", "USDHL", "FEUSD",
 ]);
 const GOLD = new Set(["PAXG", "XAUT", "XAUT0"]);
 
 /** Wrapped / staked variants that roll up to a canonical asset. */
 const ALIASES: Record<string, string> = {
-  WBTC: "BTC", CBBTC: "BTC", TBTC: "BTC", ZBTC: "BTC", LBTC: "BTC",
-  WETH: "ETH", STETH: "ETH", WSTETH: "ETH", RETH: "ETH", CBETH: "ETH",
+  WBTC: "BTC", CBBTC: "BTC", UBTC: "BTC", TBTC: "BTC", ZBTC: "BTC", LBTC: "BTC",
+  WETH: "ETH", STETH: "ETH", UETH: "ETH", WSTETH: "ETH", RETH: "ETH", CBETH: "ETH",
   WEETH: "ETH", METH: "ETH",
-  WSOL: "SOL", JITOSOL: "SOL", MSOL: "SOL", JUPSOL: "SOL", BSOL: "SOL",
+  WSOL: "SOL", USOL: "SOL", JITOSOL: "SOL", MSOL: "SOL", JUPSOL: "SOL", BSOL: "SOL",
   INF: "SOL", BNSOL: "SOL", HSOL: "SOL", DSOL: "SOL", JSOL: "SOL",
-  "USDC.E": "USDC", USDBC: "USDC",
+  "USDC.E": "USDC", USDBC: "USDC", USDT0: "USDT",
   POL: "POL", MATIC: "POL", XAUT0: "XAUT",
 };
 

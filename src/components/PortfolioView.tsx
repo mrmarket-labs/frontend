@@ -1,11 +1,12 @@
 import { CATEGORY_LABELS } from "@/lib/classify";
 import type { PortfolioResponse } from "@/lib/types";
-import { AllocationBar, Legend, Panel, pct, sliceBy, usd } from "./ui";
+import { AllocationBar, CHAIN_LABELS, Legend, Panel, pct, sliceBy, usd } from "./ui";
 
 const VISIBLE_ROWS = 12;
 
 export function PortfolioView({ portfolio }: { portfolio: PortfolioResponse }) {
-  const { holdings, totalUsd, errors } = portfolio;
+  const { holdings, positions = [], totalUsd, errors } = portfolio;
+  const notional = positions.reduce((s, p) => s + p.notionalUsd, 0);
   const slices = sliceBy(holdings, (h) => h.category, (h) => h.valueUsd);
   const top = holdings.slice(0, VISIBLE_ROWS);
   const rest = holdings.slice(VISIBLE_ROWS);
@@ -49,7 +50,7 @@ export function PortfolioView({ portfolio }: { portfolio: PortfolioResponse }) {
                       <span className="font-medium">{h.symbol}</span>
                     </div>
                   </td>
-                  <td className="px-1 py-2 capitalize text-muted">{h.chain}</td>
+                  <td className="px-1 py-2 text-muted">{CHAIN_LABELS[h.chain]}</td>
                   <td className="px-1 py-2 text-muted">{CATEGORY_LABELS[h.category]}</td>
                   <td className="num px-1 py-2 text-right">{usd(h.valueUsd)}</td>
                   <td className="num px-1 py-2 text-right text-muted">{pct((h.valueUsd / totalUsd) * 100)}</td>
@@ -64,6 +65,46 @@ export function PortfolioView({ portfolio }: { portfolio: PortfolioResponse }) {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {positions.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-medium">Leveraged perp positions</h3>
+            <span className="num text-xs text-muted">
+              {usd(notional)} notional · {totalUsd > 0 ? `${(notional / totalUsd).toFixed(1)}x` : "n/a"} your net worth
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted">Margin is already counted above; this is extra exposure on top.</p>
+          <div className="-mx-1 mt-2 overflow-x-auto">
+            <table className="w-full min-w-[480px] text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-muted">
+                  <th className="px-1 pb-2 font-normal">Market</th>
+                  <th className="px-1 pb-2 font-normal">Side</th>
+                  <th className="px-1 pb-2 text-right font-normal">Notional</th>
+                  <th className="px-1 pb-2 text-right font-normal">PnL</th>
+                  <th className="px-1 pb-2 text-right font-normal">Liq. price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((p) => (
+                  <tr key={`${p.venue}-${p.coin}`} className="border-t border-line">
+                    <td className="px-1 py-2 font-medium">
+                      {p.coin} <span className="num text-xs font-normal text-muted">{p.leverage}x</span>
+                    </td>
+                    <td className={`px-1 py-2 capitalize ${p.side === "long" ? "text-accent" : "text-danger"}`}>{p.side}</td>
+                    <td className="num px-1 py-2 text-right">{usd(p.notionalUsd)}</td>
+                    <td className={`num px-1 py-2 text-right ${p.unrealizedPnlUsd >= 0 ? "text-accent" : "text-danger"}`}>
+                      {p.unrealizedPnlUsd >= 0 ? "+" : "−"}{usd(Math.abs(p.unrealizedPnlUsd))}
+                    </td>
+                    <td className="num px-1 py-2 text-right text-muted">{p.liquidationPx ? usd(p.liquidationPx) : "n/a"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

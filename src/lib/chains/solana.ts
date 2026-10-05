@@ -2,7 +2,7 @@ import { canonicalAsset, classify } from "../classify";
 import { chunk, getJson, rpc } from "../http";
 import type { Holding } from "../types";
 
-const RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+const RPC_URL = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 const TOKEN_PROGRAMS = [
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", // Token-2022 (xStocks live here)

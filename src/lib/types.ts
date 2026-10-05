@@ -5,7 +5,9 @@ export type Chain =
   | "base"
   | "arbitrum"
   | "optimism"
-  | "polygon";
+  | "polygon"
+  | "hyperliquid"
+  | "hyperevm";
 
 export type Category =
   | "stablecoin"
@@ -37,8 +39,20 @@ export interface ScanError {
   message: string;
 }
 
+export interface PerpPosition {
+  venue: "hyperliquid";
+  coin: string;
+  side: "long" | "short";
+  notionalUsd: number;
+  leverage: number;
+  unrealizedPnlUsd: number;
+  liquidationPx: number | null;
+}
+
 export interface PortfolioResponse {
   holdings: Holding[];
+  /** Leveraged exposure on top of holdings; their margin is already counted in holdings. */
+  positions: PerpPosition[];
   errors: ScanError[];
   totalUsd: number;
 }

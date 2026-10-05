@@ -25,7 +25,7 @@ const ETH_NATIVE = { symbol: "ETH", name: "Ether", decimals: 18, coingeckoId: "e
 export const EVM_CHAINS: EvmChain[] = [
   {
     chain: "ethereum",
-    rpc: process.env.ETHEREUM_RPC_URL ?? "https://ethereum-rpc.publicnode.com",
+    rpc: process.env.ETHEREUM_RPC_URL || "https://ethereum-rpc.publicnode.com",
     native: ETH_NATIVE,
     tokens: [
       { symbol: "USDC", name: "USD Coin", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, coingeckoId: "usd-coin" },
@@ -45,7 +45,7 @@ export const EVM_CHAINS: EvmChain[] = [
   },
   {
     chain: "base",
-    rpc: process.env.BASE_RPC_URL ?? "https://base-rpc.publicnode.com",
+    rpc: process.env.BASE_RPC_URL || "https://base-rpc.publicnode.com",
     native: ETH_NATIVE,
     tokens: [
       { symbol: "USDC", name: "USD Coin", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, coingeckoId: "usd-coin" },
@@ -56,7 +56,7 @@ export const EVM_CHAINS: EvmChain[] = [
   },
   {
     chain: "arbitrum",
-    rpc: process.env.ARBITRUM_RPC_URL ?? "https://arbitrum-one-rpc.publicnode.com",
+    rpc: process.env.ARBITRUM_RPC_URL || "https://arbitrum-one-rpc.publicnode.com",
     native: ETH_NATIVE,
     tokens: [
       { symbol: "USDC", name: "USD Coin", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, coingeckoId: "usd-coin" },
@@ -68,7 +68,7 @@ export const EVM_CHAINS: EvmChain[] = [
   },
   {
     chain: "optimism",
-    rpc: process.env.OPTIMISM_RPC_URL ?? "https://optimism-rpc.publicnode.com",
+    rpc: process.env.OPTIMISM_RPC_URL || "https://optimism-rpc.publicnode.com",
     native: ETH_NATIVE,
     tokens: [
       { symbol: "USDC", name: "USD Coin", address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", decimals: 6, coingeckoId: "usd-coin" },
@@ -78,13 +78,19 @@ export const EVM_CHAINS: EvmChain[] = [
   },
   {
     chain: "polygon",
-    rpc: process.env.POLYGON_RPC_URL ?? "https://polygon-bor-rpc.publicnode.com",
+    rpc: process.env.POLYGON_RPC_URL || "https://polygon-bor-rpc.publicnode.com",
     native: { symbol: "POL", name: "Polygon", decimals: 18, coingeckoId: "polygon-ecosystem-token" },
     tokens: [
       { symbol: "USDC", name: "USD Coin", address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6, coingeckoId: "usd-coin" },
       { symbol: "USDT", name: "Tether", address: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", decimals: 6, coingeckoId: "tether" },
       { symbol: "WETH", name: "Wrapped Ether", address: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", decimals: 18, coingeckoId: "weth" },
     ],
+  },
+  {
+    chain: "hyperevm",
+    rpc: process.env.HYPEREVM_RPC_URL || "https://rpc.hyperliquid.xyz/evm",
+    native: { symbol: "HYPE", name: "Hyperliquid", decimals: 18, coingeckoId: "hyperliquid" },
+    tokens: [],
   },
 ];
 
@@ -126,12 +132,13 @@ async function scanChain(cfg: EvmChain, address: string): Promise<{ token: Omit<
   }));
 }
 
-export async function scanEvm(address: string): Promise<{ holdings: Holding[]; failedChains: Chain[] }> {
+export async function scanEvm(address: string): Promise<{ holdings: Holding[]; failedChains: { chain: Chain; reason: string }[] }> {
   const settled = await Promise.allSettled(EVM_CHAINS.map((cfg) => scanChain(cfg, address)));
-  const failedChains: Chain[] = [];
+  const failedChains: { chain: Chain; reason: string }[] = [];
   const found: { chain: Chain; token: Omit<Token, "address">; amount: number }[] = [];
   settled.forEach((r, i) => {
-    if (r.status === "rejected") failedChains.push(EVM_CHAINS[i].chain);
+    if (r.status === "rejected")
+      failedChains.push({ chain: EVM_CHAINS[i].chain, reason: r.reason instanceof Error ? r.reason.message : String(r.reason) });
     else for (const b of r.value) if (b.amount > 0) found.push({ chain: EVM_CHAINS[i].chain, ...b });
   });
 

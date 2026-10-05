@@ -15,7 +15,7 @@ const STORAGE_KEY = "diversify:addresses";
 const LEGACY_STORAGE_KEY = "holdwise:addresses";
 
 function detectChain(address: string): string | null {
-  if (/^0x[0-9a-fA-F]{40}$/.test(address)) return "EVM · ETH, Base, Arbitrum, Optimism, Polygon";
+  if (/^0x[0-9a-fA-F]{40}$/.test(address)) return "EVM · ETH, Base, Arbitrum, Optimism, Polygon, Hyperliquid";
   if (/^[xyz]pub[1-9A-HJ-NP-Za-km-z]{100,112}$/.test(address)) return "Bitcoin wallet (all addresses)";
   if (/^(bc1[02-9ac-hj-np-z]{11,87}|[13][1-9A-HJ-NP-Za-km-z]{25,34})$/.test(/^bc1/i.test(address) ? address.toLowerCase() : address))
     return address.toLowerCase().startsWith("bc1p") ? "Bitcoin (Taproot)" : "Bitcoin";
@@ -104,6 +104,7 @@ export default function Home() {
     try {
       const data = await postJson<{ advice: Advice; trades: Trade[]; market: MarketSnapshot }>("/api/advise", {
         holdings: portfolio.holdings,
+        positions: portfolio.positions,
         personaId,
         risk,
         horizon,
@@ -140,7 +141,7 @@ export default function Home() {
             onChange={(e) => setAddressText(e.target.value)}
             rows={4}
             spellCheck={false}
-            placeholder={"One per line: Solana, Ethereum/L2 (0x…), Bitcoin address (bc1…) or Bitcoin xpub/zpub"}
+            placeholder={"One per line: Solana, Ethereum/L2/Hyperliquid (0x…), Bitcoin address (bc1…) or Bitcoin xpub/zpub"}
             className="w-full resize-y rounded-xl border border-line bg-bg/60 p-3.5 font-mono text-sm outline-none placeholder:text-muted/70 focus:border-accent/60"
           />
           {lines.length > 0 && (
