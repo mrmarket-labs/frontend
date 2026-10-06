@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getEvmWallet, getEvmWallets, subscribeEvmWallets, type EvmWalletInfo } from "./eip6963";
+import { isMobileBrowser, walletBrowserLinks, type WalletBrowserLinks } from "./mobile";
 import { connectPhantom, hasPhantom } from "./phantom";
 import { loadWallets, saveWallets, watchedWallet } from "./store";
 import { detectKind, normalizeAddress, sameAddress, type Wallet, type WalletAddress } from "./types";
@@ -29,6 +30,7 @@ export function useWallets() {
   const [ready, setReady] = useState(false);
   const [evmWallets, setEvmWallets] = useState<EvmWalletInfo[]>([]);
   const [phantomAvailable, setPhantomAvailable] = useState(false);
+  const [mobileLinks, setMobileLinks] = useState<WalletBrowserLinks | null>(null);
 
   const setWallets = useCallback((next: Wallet[] | ((prev: Wallet[]) => Wallet[])) => {
     setWalletsState((prev) => {
@@ -45,6 +47,7 @@ export function useWallets() {
     setReady(true);
     setPhantomAvailable(hasPhantom());
     setEvmWallets(getEvmWallets());
+    if (isMobileBrowser()) setMobileLinks(walletBrowserLinks());
     const unsubscribe = subscribeEvmWallets(() => setEvmWallets(getEvmWallets()));
     // Extensions inject late sometimes; look again after a beat.
     const timer = setTimeout(() => setPhantomAvailable(hasPhantom()), 800);
@@ -157,6 +160,8 @@ export function useWallets() {
     ready,
     phantomAvailable,
     evmWallets,
+    /** Set on phones and tablets: links that reopen the page inside a wallet app's browser. */
+    mobileLinks,
     allAddresses: wallets.flatMap((w) => w.addresses.map((a) => a.address)),
     addWatched,
     connectPhantom: connectPhantomWallet,

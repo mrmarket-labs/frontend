@@ -27,6 +27,15 @@ function start() {
     listeners.forEach((l) => l());
   });
   window.dispatchEvent(new Event("eip6963:requestProvider"));
+  // Some wallet in-app browsers (mostly on phones) only inject window.ethereum. Give the
+  // announcements a beat, then fall back to it.
+  setTimeout(() => {
+    const eth = (window as unknown as { ethereum?: Eip1193Provider & { isMetaMask?: boolean; isPhantom?: boolean } }).ethereum;
+    if (wallets.size > 0 || !eth || eth.isPhantom) return;
+    const rdns = eth.isMetaMask ? "io.metamask" : "injected";
+    wallets.set(rdns, { rdns, name: eth.isMetaMask ? "MetaMask" : "Browser wallet", icon: "", provider: eth });
+    listeners.forEach((l) => l());
+  }, 400);
 }
 
 export function subscribeEvmWallets(listener: () => void): () => void {

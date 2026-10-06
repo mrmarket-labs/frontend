@@ -283,7 +283,30 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
                   </span>
                 </button>
               ))}
-              {noExtensions && (
+              {noExtensions && api.mobileLinks && (
+                <>
+                  <p className="text-meta leading-normal text-ink-2">
+                    A phone browser cannot reach your wallet app from here. Open this page inside the wallet instead, then connect there.
+                  </p>
+                  {(["phantom", "metamask"] as const).map((id) => {
+                    const label = id === "phantom" ? "Phantom" : "MetaMask";
+                    return (
+                      <a key={id} href={api.mobileLinks![id]} className="flex min-h-tap items-center gap-[11px] rounded-input bg-surface-input px-3 py-2">
+                        <WalletMark wallet={{ provider: id, mode: "connected", label }} size={30} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-row font-medium">Open in {label}</span>
+                          <span className="block text-meta text-ink-2">
+                            {id === "phantom" ? "Solana · Ethereum · Bitcoin in one connection" : "Ethereum, L2s and Hyperliquid"}
+                          </span>
+                        </span>
+                        <span className="font-mono text-body text-ink-2">↗</span>
+                      </a>
+                    );
+                  })}
+                  <p className="text-meta leading-normal text-ink-3">No wallet app? Watch an address instead; it reads balances without connecting.</p>
+                </>
+              )}
+              {noExtensions && !api.mobileLinks && (
                 <p className="text-meta leading-normal text-ink-2">
                   No wallet extension found in this browser. Install Phantom or MetaMask, or watch an address instead.
                 </p>
