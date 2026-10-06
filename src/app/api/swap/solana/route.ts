@@ -8,7 +8,7 @@ const JUPITER = process.env.JUPITER_API_KEY
   : { base: "https://lite-api.jup.ag/swap/v1", headers: {} as Record<string, string> };
 
 const DEFAULT_SLIPPAGE_BPS = 50;
-const MAX_PRIORITY_FEE_LAMPORTS = 2_000_000; // 0.002 SOL cap on the priority fee
+const MAX_PRIORITY_FEE_LAMPORTS = 5_000_000; // 0.005 SOL cap on the priority fee
 
 const base58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const RequestSchema = z.object({
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         ...(feeAccount && { feeAccount }),
         dynamicComputeUnitLimit: true,
         prioritizationFeeLamports: {
-          priorityLevelWithMaxLamports: { maxLamports: MAX_PRIORITY_FEE_LAMPORTS, priorityLevel: "medium" },
+          priorityLevelWithMaxLamports: { maxLamports: MAX_PRIORITY_FEE_LAMPORTS, priorityLevel: "high" },
         },
       }),
     });

@@ -14,7 +14,7 @@ type State = "quoting" | "ready" | Phase | "done" | "failed";
 const PHASE_LABEL: Record<Phase, string> = {
   approving: "Approve the token in your wallet…",
   signing: "Confirm the swap in your wallet…",
-  confirming: "Waiting for the network…",
+  confirming: "Sent. Rebroadcasting until the network confirms it…",
 };
 
 function fmt(n: number, maxSig = 6): string {
@@ -62,8 +62,9 @@ export function ReviewSheet({ step, wallet, onClose, onDone }: {
   async function sign() {
     if (!quote) return;
     setError(null);
+    setTxId(null);
     try {
-      const id = await executeStep(step, wallet, quote, setState);
+      const id = await executeStep(step, wallet, quote, setState, setTxId);
       setTxId(id);
       setState("done");
     } catch (e) {
@@ -148,6 +149,19 @@ export function ReviewSheet({ step, wallet, onClose, onDone }: {
         {busy && (
           <p className="mt-4 flex items-center gap-2 text-sm text-muted">
             <Spinner /> {PHASE_LABEL[state as Phase]}
+            {txId && state === "confirming" && (
+              <a href={`${EXPLORER_TX[step.chain]}${txId}`} target="_blank" rel="noreferrer" className="ml-auto text-xs text-accent hover:underline">
+                View on explorer ↗
+              </a>
+            )}
+          </p>
+        )}
+        {state === "failed" && txId && (
+          <p className="mt-2 text-xs text-muted">
+            Sent as{" "}
+            <a href={`${EXPLORER_TX[step.chain]}${txId}`} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+              {txId.slice(0, 8)}…{txId.slice(-6)} ↗
+            </a>
           </p>
         )}
         {state === "done" && txId && (

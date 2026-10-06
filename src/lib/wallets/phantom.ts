@@ -6,6 +6,7 @@ interface PhantomSolana {
   publicKey: { toString(): string } | null;
   connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>;
   signAndSendTransaction(tx: VersionedTransaction, opts?: { skipPreflight?: boolean }): Promise<{ signature: string }>;
+  signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
 }
 interface PhantomBitcoin {
   requestAccounts(): Promise<{ address: string; addressType: string; purpose: "payment" | "ordinals" }[]>;
@@ -49,6 +50,20 @@ export async function connectPhantom(opts: { onlyIfTrusted?: boolean } = {}): Pr
     } catch {}
   }
   return out;
+}
+
+/** Sign only; the app broadcasts and rebroadcasts the bytes itself so the swap can't be dropped silently. */
+export async function phantomSignSolana(txBase64: string, expectedPublicKey: string): Promise<string> {
+  const p = win();
+  if (!p?.solana) throw new Error("Phantom isn't installed.");
+  if (p.solana.publicKey?.toString() !== expectedPublicKey) {
+    const { publicKey } = await p.solana.connect();
+    if (publicKey.toString() !== expectedPublicKey)
+      throw new Error(`Phantom is on a different account. Switch to ${expectedPublicKey.slice(0, 4)}…${expectedPublicKey.slice(-4)} and retry.`);
+  }
+  const bytes = Uint8Array.from(atob(txBase64), (c) => c.charCodeAt(0));
+  const signed = await p.solana.signTransaction(VersionedTransaction.deserialize(bytes));
+  return btoa(String.fromCharCode(...signed.serialize()));
 }
 
 export async function phantomSignAndSendSolana(txBase64: string, expectedPublicKey: string): Promise<string> {

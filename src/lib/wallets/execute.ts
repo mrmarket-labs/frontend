@@ -1,7 +1,7 @@
 import type { SwapStep } from "../plan";
 import { EVM_CHAIN_IDS, EVM_CHAIN_PARAMS, NATIVE, ZEROX_NATIVE, fromRawUnits, toRawUnits, type EvmExecChain } from "../tokens";
 import { getEvmWallet } from "./eip6963";
-import { phantomEvmProvider, phantomSignAndSendSolana } from "./phantom";
+import { phantomEvmProvider, phantomSignSolana } from "./phantom";
 import type { Eip1193Provider, Wallet } from "./types";
 
 export interface SolanaQuote {
@@ -99,14 +99,31 @@ function sellPriceIfSol(step: SwapStep, sellPrice: number): number {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function waitSolana(signature: string): Promise<void> {
-  for (let i = 0; i < 45; i++) {
-    const s = await api<{ status: "pending" | "confirmed" | "failed"; error?: string }>(`/api/swap/solana/status?signature=${signature}`);
-    if (s.status === "confirmed") return;
-    if (s.status === "failed") throw new Error(`Transaction failed on-chain: ${s.error ?? "unknown error"}`);
+/** Broadcast, then keep rebroadcasting the same signed bytes until the chain confirms or the blockhash expires. */
+async function sendAndConfirmSolana(signedTransaction: string, lastValidBlockHeight: number, onSent: (sig: string) => void): Promise<string> {
+  const { signature } = await api<{ signature: string }>("/api/swap/solana/send", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ signedTransaction }),
+  });
+  onSent(signature);
+  const deadline = Date.now() + 150_000;
+  while (Date.now() < deadline) {
     await sleep(2000);
+    const s = await api<{ status: "pending" | "confirmed" | "failed" | "expired"; error?: string }>(
+      `/api/swap/solana/status?signature=${signature}&lastValidBlockHeight=${lastValidBlockHeight}`,
+    );
+    if (s.status === "confirmed") return signature;
+    if (s.status === "failed") throw new Error(`Transaction failed on-chain: ${s.error ?? "unknown error"}`);
+    if (s.status === "expired") throw new Error("The transaction expired before it was confirmed. Nothing was spent; get a fresh quote and try again.");
+    // Not landed yet: resend the identical bytes (same signature) so it reaches a leader.
+    await fetch("/api/swap/solana/send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signedTransaction }),
+    }).catch(() => undefined);
   }
-  throw new Error("Not confirmed after 90s. Check the explorer link before retrying.");
+  throw new Error("Still unconfirmed after 2.5 minutes. Check the explorer link; if it never lands, nothing was spent.");
 }
 
 function evmProviderFor(wallet: Wallet): Eip1193Provider {
@@ -151,14 +168,23 @@ function approveData(spender: string, amount: string): string {
   return `0x095ea7b3${pad(spender)}${pad(BigInt(amount).toString(16))}`;
 }
 
-export async function executeStep(step: SwapStep, wallet: Wallet, quote: Quote, onPhase: (p: Phase) => void): Promise<string> {
+export async function executeStep(
+  step: SwapStep,
+  wallet: Wallet,
+  quote: Quote,
+  onPhase: (p: Phase) => void,
+  onSent: (txId: string) => void = () => undefined,
+): Promise<string> {
   if (quote.kind === "solana") {
     if (wallet.provider !== "phantom") throw new Error("Only Phantom can sign Solana swaps right now.");
+    // Blockhashes live ~60s, so build the transaction right before Phantom opens.
+    const fresh = (await fetchQuote(step)) as SolanaQuote;
+    if (BigInt(fresh.minOutAmount) < (BigInt(quote.minOutAmount) * BigInt(99)) / BigInt(100))
+      throw new Error("The price moved more than 1% since this quote. Review the new quote and try again.");
     onPhase("signing");
-    const signature = await phantomSignAndSendSolana(quote.swapTransaction, step.address);
+    const signed = await phantomSignSolana(fresh.swapTransaction, step.address);
     onPhase("confirming");
-    await waitSolana(signature);
-    return signature;
+    return sendAndConfirmSolana(signed, fresh.lastValidBlockHeight, onSent);
   }
 
   const provider = evmProviderFor(wallet);
