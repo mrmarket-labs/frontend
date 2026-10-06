@@ -75,9 +75,10 @@ export function useWallets() {
     [setWallets],
   );
 
-  const connectPhantomWallet = useCallback(async () => {
+  const connectPhantomWallet = useCallback(async (): Promise<WalletAddress[]> => {
     const addresses = await connectPhantom();
     setWallets((prev) => mergeConnected(prev, "phantom", "Phantom", addresses));
+    return addresses;
   }, [setWallets]);
 
   const connectEvmWallet = useCallback(

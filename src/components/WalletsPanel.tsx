@@ -23,13 +23,15 @@ function WalletIcon({ wallet }: { wallet: Wallet }) {
   );
 }
 
-export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onScan, openPickerSignal }: {
+export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onScan, onWalletsChanged, openPickerSignal }: {
   api: WalletsApi;
   holdings: Holding[];
   scanned: boolean;
   scanning: boolean;
   scanError: string | null;
   onScan: () => void;
+  /** Fired after a connect or watch adds addresses; the parent rescans once state has settled. */
+  onWalletsChanged: () => void;
   /** Bump to open the connect picker from elsewhere (e.g. "Connect to execute"). */
   openPickerSignal: number;
 }) {
@@ -38,6 +40,7 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
   const [watchText, setWatchText] = useState("");
   const [watchError, setWatchError] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [connectHint, setConnectHint] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -59,13 +62,17 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
   const valueOf = (a: WalletAddress) => holdings.filter((h) => sameAddress(h.address, a.address)).reduce((s, h) => s + h.valueUsd, 0);
   const walletTotal = (w: Wallet) => w.addresses.reduce((s, a) => s + valueOf(a), 0);
 
-  async function connect(fn: () => Promise<void>) {
+  async function connect(fn: () => Promise<WalletAddress[] | void>) {
     setConnecting(true);
     setConnectError(null);
+    setConnectHint(null);
     try {
-      await fn();
+      const added = await fn();
+      // Newer Phantom builds no longer hand out Bitcoin addresses to websites.
+      if (added && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin"))
+        setConnectHint("Phantom shared Solana and Ethereum but not Bitcoin. Paste your BTC address (Phantom → Bitcoin → Receive) with “Watch address”; it joins the same wallet.");
       setPickerOpen(false);
-      onScan();
+      onWalletsChanged();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setConnectError(/reject|denied|cancel/i.test(msg) ? "Connection cancelled in the wallet." : msg);
@@ -81,6 +88,7 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
       setWatchError(null);
       setWatchText("");
       setWatchOpen(false);
+      onWalletsChanged();
     }
   }
 
@@ -238,6 +246,7 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
         <span className="text-xs text-muted">Read-only until you sign a trade. No keys ever leave your wallet.</span>
       </div>
       {scanError && <p className="mt-3 text-sm text-danger">{scanError}</p>}
+      {connectHint && <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">{connectHint}</p>}
     </Panel>
   );
 }

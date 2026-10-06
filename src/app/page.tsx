@@ -67,6 +67,8 @@ export default function Home() {
   const [result, setResult] = useState<Result | null>(null);
 
   const [progress, setProgress] = useState<Progress>({});
+  const pendingScan = useRef(false);
+  const [walletsVersion, setWalletsVersion] = useState(0);
   const [review, setReview] = useState<SwapStep | null>(null);
   const [pickerSignal, setPickerSignal] = useState(0);
   const walletsRef = useRef<HTMLDivElement>(null);
@@ -102,6 +104,20 @@ export default function Home() {
     },
     [addresses],
   );
+
+  // The address list only settles after a connect/merge finishes, so scan from an effect
+  // instead of from the click handler (which would see the old list).
+  useEffect(() => {
+    if (!pendingScan.current) return;
+    pendingScan.current = false;
+    void scan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletsVersion]);
+
+  function onWalletsChanged() {
+    pendingScan.current = true;
+    setWalletsVersion((v) => v + 1);
+  }
 
   async function advise() {
     if (!portfolio) return;
@@ -175,6 +191,7 @@ export default function Home() {
           scanning={scanning}
           scanError={scanError}
           onScan={() => void scan()}
+          onWalletsChanged={onWalletsChanged}
           openPickerSignal={pickerSignal}
         />
         <MarketPanel market={market} error={marketError} />
