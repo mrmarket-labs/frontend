@@ -5,7 +5,8 @@ import { CATEGORY_LABELS } from "@/lib/classify";
 import { getMarketSnapshot } from "@/lib/market";
 import { HORIZONS, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
-import { rateLimit } from "@/lib/rate-limit";
+import { readSession } from "@/lib/auth";
+import { cacheGet, cacheSet, clientIp, hit, today, tooMany } from "@/lib/limits";
 import { getHyperliquidVenues } from "@/lib/venues";
 import { computeTrades } from "@/lib/rebalance";
 import type { Category } from "@/lib/types";
@@ -13,6 +14,24 @@ import type { Category } from "@/lib/types";
 export const maxDuration = 300;
 
 const ADVICE_PER_HOUR = Number(process.env.ADVICE_PER_HOUR || 10);
+const ADVICE_PER_WALLET_DAY = Number(process.env.ADVICE_PER_WALLET_DAY || 10);
+/** Hard ceiling on daily Claude spend, whatever an attacker does. */
+const ADVICE_DAILY_CAP = Number(process.env.ADVICE_DAILY_CAP || 300);
+const CACHE_TTL_SEC = 3600;
+
+/** Same portfolio shape + same question + same market regime → same answer; don't pay twice. */
+async function adviceCacheKey(holdings: { asset: string; valueUsd: number }[], params: Record<string, unknown>, regime: string): Promise<string> {
+  const total = holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
+  const byAsset = new Map<string, number>();
+  for (const h of holdings) byAsset.set(h.asset.toUpperCase(), (byAsset.get(h.asset.toUpperCase()) ?? 0) + h.valueUsd);
+  const shape = [...byAsset.entries()]
+    .map(([a, v]) => [a, Math.round((v / total) * 100)] as const)
+    .filter(([, pct]) => pct > 0)
+    .sort();
+  const fingerprint = JSON.stringify({ shape, size: Math.round(Math.log10(total) * 2), ...params, regime });
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
+  return `advcache:${Buffer.from(digest).toString("hex").slice(0, 32)}`;
+}
 
 const RequestSchema = z.object({
   personaId: z.string(),
@@ -53,12 +72,8 @@ const RequestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const limit = rateLimit(request, ADVICE_PER_HOUR, 60 * 60_000);
-  if (!limit.ok)
-    return Response.json(
-      { error: `You've hit the hourly limit for analyses. Try again in ${Math.ceil(limit.retryAfterSec / 60)} min.` },
-      { status: 429, headers: { "retry-after": String(limit.retryAfterSec) } },
-    );
+  const session = await readSession(request);
+  if (!session) return Response.json({ error: "Verify a wallet to run the advisor.", code: "auth" }, { status: 401 });
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
@@ -71,7 +86,24 @@ export async function POST(request: Request) {
 
   try {
     const [market, venues] = await Promise.all([getMarketSnapshot(), getHyperliquidVenues()]);
+    const cacheKey = await adviceCacheKey(holdings, { personaId, risk, horizon, allowPerps }, market.regime);
+    const cached = await cacheGet<Awaited<ReturnType<typeof generateAdvice>>>(cacheKey);
+    if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), market, cached: true });
+
+    // Only uncached requests spend money, so only they count against the limits.
+    const hour = Math.floor(Date.now() / 3_600_000);
+    const [global, perWallet, perIp] = await Promise.all([
+      hit(`adv:day:${today()}`, ADVICE_DAILY_CAP, 86400),
+      hit(`adv:wallet:${session.address}:${today()}`, ADVICE_PER_WALLET_DAY, 86400),
+      hit(`adv:ip:${clientIp(request)}:${hour}`, ADVICE_PER_HOUR, 3600),
+    ]);
+    if (!global.ok)
+      return Response.json({ error: "The advisor has reached today's global limit. It resets at midnight UTC.", code: "cap" }, { status: 503 });
+    if (!perWallet.ok) return tooMany(`This wallet has used today's ${ADVICE_PER_WALLET_DAY} analyses. More tomorrow.`, perWallet.retryAfterSec);
+    if (!perIp.ok) return tooMany(`Too many analyses from your network. Try again in ${Math.ceil(perIp.retryAfterSec / 60)} min.`, perIp.retryAfterSec);
+
     const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, allowPerps, market, venues });
+    await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError)

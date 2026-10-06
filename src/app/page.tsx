@@ -15,6 +15,8 @@ import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
 import type { Trade } from "@/lib/rebalance";
 import type { Holding, MarketSnapshot, PortfolioResponse } from "@/lib/types";
 import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progress";
+import { getSession, signIn, signOut, signableAddress, type SessionInfo } from "@/lib/wallets/signin";
+import { shortAddress } from "@/lib/wallets/types";
 import { useWallets } from "@/lib/wallets/useWallets";
 
 interface Result {
@@ -66,6 +68,9 @@ export default function Home() {
   const [adviceError, setAdviceError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
 
+  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const [progress, setProgress] = useState<Progress>({});
   const pendingScan = useRef(false);
   const [walletsVersion, setWalletsVersion] = useState(0);
@@ -76,6 +81,7 @@ export default function Home() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setProgress(loadProgress());
+    getSession().then(setSession).catch(() => undefined);
     fetch("/api/market")
       .then(async (r) => {
         const data = await r.json();
@@ -119,6 +125,23 @@ export default function Home() {
     setWalletsVersion((v) => v + 1);
   }
 
+  const signableWallets = wallets.wallets.filter((w) => signableAddress(w));
+
+  async function verify(walletId: string) {
+    const wallet = wallets.wallets.find((w) => w.id === walletId);
+    if (!wallet) return;
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      setSession(await signIn(wallet));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSignInError(/reject|denied|cancel/i.test(msg) ? "Signature cancelled in the wallet." : msg);
+    } finally {
+      setSigningIn(false);
+    }
+  }
+
   async function advise() {
     if (!portfolio) return;
     setAdvising(true);
@@ -144,7 +167,9 @@ export default function Home() {
       setProgress({});
       saveProgress({});
     } catch (e) {
-      setAdviceError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/Verify a wallet/.test(msg)) setSession(null);
+      setAdviceError(msg);
     } finally {
       setAdvising(false);
     }
@@ -227,14 +252,51 @@ export default function Home() {
                 <span className="block text-xs text-muted">1x longs on Hyperliquid (S&amp;P 500, Nasdaq, gold) when spot is too thin. They pay ongoing funding fees.</span>
               </span>
             </label>
-            <button
-              onClick={advise}
-              disabled={advising || portfolio.holdings.length === 0}
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-3 font-medium text-bg transition hover:bg-accent disabled:opacity-40"
-            >
-              {advising && <Spinner />}
-              {advising ? `Thinking like ${persona.name.split(" ")[1]}…` : `Diversify like ${persona.name.split(" ")[1]}`}
-            </button>
+            {session ? (
+              <>
+                <button
+                  onClick={advise}
+                  disabled={advising || portfolio.holdings.length === 0}
+                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-3 font-medium text-bg transition hover:bg-accent disabled:opacity-40"
+                >
+                  {advising && <Spinner />}
+                  {advising ? `Thinking like ${persona.name.split(" ")[1]}…` : `Diversify like ${persona.name.split(" ")[1]}`}
+                </button>
+                <p className="mt-2 text-center text-xs text-muted">
+                  Verified as <span className="font-mono">{shortAddress(session.address)}</span> ·{" "}
+                  <button onClick={() => signOut().then(() => setSession(null))} className="hover:text-ink">
+                    sign out
+                  </button>
+                </p>
+              </>
+            ) : (
+              <div className="mt-6 rounded-xl border border-line bg-bg/60 p-3">
+                <p className="text-sm">Verify a wallet to run the advisor</p>
+                <p className="mt-1 text-xs text-muted">
+                  A free signature, no transaction. It proves the wallet is yours and keeps bots from burning the analysis budget.
+                </p>
+                {signableWallets.length === 0 ? (
+                  <button onClick={openConnect} className="mt-3 w-full rounded-xl bg-ink py-2.5 text-sm font-medium text-bg hover:bg-accent">
+                    Connect a wallet
+                  </button>
+                ) : (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {signableWallets.map((w) => (
+                      <button
+                        key={w.id}
+                        onClick={() => verify(w.id)}
+                        disabled={signingIn}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink py-2.5 text-sm font-medium text-bg hover:bg-accent disabled:opacity-40"
+                      >
+                        {signingIn && <Spinner />}
+                        Verify with {w.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {signInError && <p className="mt-2 text-xs text-danger">{signInError}</p>}
+              </div>
+            )}
             {advising && <p className="mt-2 text-center text-xs text-muted">Deep analysis takes 30-90 seconds.</p>}
             {adviceError && <p className="mt-3 text-sm text-danger">{adviceError}</p>}
           </Panel>

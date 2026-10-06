@@ -1,6 +1,9 @@
+import { clientIp, hit, tooMany } from "@/lib/limits";
 import { MAX_ADDRESSES, parseAddresses, scanPortfolio } from "@/lib/portfolio";
 
 export async function POST(request: Request) {
+  const limit = await hit(`scan:ip:${clientIp(request)}:${Math.floor(Date.now() / 3_600_000)}`, 60, 3600);
+  if (!limit.ok) return tooMany("Too many portfolio scans from your network. Try again in a few minutes.", limit.retryAfterSec);
   const body = (await request.json().catch(() => null)) as { addresses?: string } | null;
   const addresses = parseAddresses(body?.addresses ?? "");
   if (addresses.length === 0) return Response.json({ error: "Add at least one address." }, { status: 400 });

@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { FEE_BPS, FEE_WALLET_EVM } from "@/lib/fees";
+import { clientIp, hit, tooMany } from "@/lib/limits";
 import { EVM_CHAIN_IDS } from "@/lib/tokens";
 
 const ZEROX_API_KEY = process.env.ZEROX_API_KEY || "";
@@ -26,6 +27,8 @@ interface ZeroXQuote {
 }
 
 export async function GET(request: Request) {
+  const limit = await hit(`swap:ip:${clientIp(request)}:${Math.floor(Date.now() / 3_600_000)}`, 120, 3600);
+  if (!limit.ok) return tooMany("Too many quote requests. Try again in a few minutes.", limit.retryAfterSec);
   if (!ZEROX_API_KEY)
     return Response.json({ error: "EVM swaps aren't enabled yet: the server has no 0x API key." }, { status: 503 });
   const parsed = RequestSchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));

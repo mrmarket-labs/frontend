@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { FEE_BPS, solanaFeeAccount } from "@/lib/fees";
 import { getJson } from "@/lib/http";
+import { clientIp, hit, tooMany } from "@/lib/limits";
 
 // lite-api is keyless and rate-limited; api.jup.ag needs a key but has higher limits.
 const JUPITER = process.env.JUPITER_API_KEY
@@ -37,6 +38,8 @@ interface JupSwap {
 }
 
 export async function POST(request: Request) {
+  const limit = await hit(`swap:ip:${clientIp(request)}:${Math.floor(Date.now() / 3_600_000)}`, 120, 3600);
+  if (!limit.ok) return tooMany("Too many quote requests. Try again in a few minutes.", limit.retryAfterSec);
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid swap request." }, { status: 400 });
   const { inputMint, outputMint, amount, userPublicKey, slippageBps } = parsed.data;

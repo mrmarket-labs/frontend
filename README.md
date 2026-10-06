@@ -47,6 +47,21 @@ transaction the user signs in their own wallet.
   skipped on that trade.
 - `ZEROX_API_KEY` is required for EVM swaps (free at dashboard.0x.org). Without it EVM steps show an error.
 
+## Abuse protection
+
+Every advisor run costs real money (Claude), so `/api/advise` is gated:
+
+- **Wallet sign-in**: the user signs a free message (Solana `signMessage` or EVM `personal_sign`); the server
+  verifies it, checks the wallet holds at least `MIN_SIGNIN_USD`, and sets an HMAC-signed session cookie
+  (`AUTH_SECRET`). Throwaway wallets can't farm the endpoint because empty ones are refused.
+- **Quotas**: a global daily cap (`ADVICE_DAILY_CAP`, the hard ceiling on spend), per-wallet per day
+  (`ADVICE_PER_WALLET_DAY`) and per-IP per hour. Portfolio scans and swap quotes are rate limited too.
+- **Cache**: identical questions (same portfolio shape, persona, risk, horizon, market regime) are served
+  from a one-hour cache and don't count against quotas.
+- Counters live in Upstash Redis (`UPSTASH_REDIS_REST_URL/TOKEN`, add via the Vercel marketplace). Without it
+  the app still works but limits are per serverless instance, which is not real protection.
+- Also set a monthly spend limit in the Anthropic Console as the final backstop.
+
 ## Known limits / next steps
 
 - **EVM token discovery** covers a curated list of majors. Plug in an indexer (Alchemy, Moralis) to see everything.
