@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getEvmWallet, getEvmWallets, subscribeEvmWallets, type EvmWalletInfo } from "./eip6963";
 import { connectPhantom, hasPhantom } from "./phantom";
 import { loadWallets, saveWallets, watchedWallet } from "./store";
-import { detectKind, sameAddress, type Wallet, type WalletAddress } from "./types";
+import { detectKind, normalizeAddress, sameAddress, type Wallet, type WalletAddress } from "./types";
 
 /** Attach addresses to a connected wallet, absorbing any watched entries for the same addresses. */
 function mergeConnected(wallets: Wallet[], provider: string, label: string, addresses: WalletAddress[]): Wallet[] {
@@ -92,6 +92,58 @@ export function useWallets() {
     [setWallets],
   );
 
+  /** Bitcoin addresses inside a multi-chain wallet get the same purpose label Phantom uses. */
+  const withNote = (a: WalletAddress): WalletAddress =>
+    a.kind === "bitcoin" && !a.note ? { ...a, note: a.address.startsWith("bc1p") ? "ordinals" : "payment" } : a;
+
+  /** Attach pasted addresses to an existing wallet (e.g. a Bitcoin address Phantom won't share). */
+  const addAddressesTo = useCallback(
+    (walletId: string, input: string): string[] => {
+      const rejected: string[] = [];
+      setWallets((prev) => {
+        const incoming: WalletAddress[] = [];
+        for (const raw of input.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean)) {
+          const kind = detectKind(raw);
+          if (!kind) {
+            rejected.push(raw);
+            continue;
+          }
+          const address = normalizeAddress(raw);
+          if (prev.some((w) => w.id === walletId && w.addresses.some((a) => sameAddress(a.address, address)))) continue;
+          incoming.push(withNote({ kind, address }));
+        }
+        if (incoming.length === 0) return prev;
+        const taken = (a: WalletAddress) => incoming.some((b) => sameAddress(a.address, b.address));
+        return prev
+          .map((w) =>
+            w.id === walletId
+              ? { ...w, addresses: [...w.addresses, ...incoming] }
+              : { ...w, addresses: w.addresses.filter((a) => !taken(a)) },
+          )
+          .filter((w) => w.addresses.length > 0);
+      });
+      return rejected;
+    },
+    [setWallets],
+  );
+
+  /** Fold a watched wallet into another wallet. */
+  const attachWallet = useCallback(
+    (fromId: string, toId: string) =>
+      setWallets((prev) => {
+        const from = prev.find((w) => w.id === fromId);
+        if (!from || fromId === toId) return prev;
+        return prev
+          .filter((w) => w.id !== fromId)
+          .map((w) =>
+            w.id === toId
+              ? { ...w, addresses: [...w.addresses, ...from.addresses.filter((a) => !w.addresses.some((b) => sameAddress(a.address, b.address))).map(withNote)] }
+              : w,
+          );
+      }),
+    [setWallets],
+  );
+
   const rename = useCallback((id: string, label: string) => setWallets((p) => p.map((w) => (w.id === id ? { ...w, label } : w))), [setWallets]);
   const remove = useCallback((id: string) => setWallets((p) => p.filter((w) => w.id !== id)), [setWallets]);
 
@@ -111,6 +163,8 @@ export function useWallets() {
     connectEvm: connectEvmWallet,
     rename,
     remove,
+    addAddressesTo,
+    attachWallet,
     walletFor,
   };
 }

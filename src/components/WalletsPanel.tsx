@@ -43,6 +43,9 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
   const [connectHint, setConnectHint] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [addText, setAddText] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,8 +72,10 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
     try {
       const added = await fn();
       // Newer Phantom builds no longer hand out Bitcoin addresses to websites.
-      if (added && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin"))
-        setConnectHint("Phantom shared Solana and Ethereum but not Bitcoin. Paste your BTC address (Phantom → Bitcoin → Receive) with “Watch address”; it joins the same wallet.");
+      if (added && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin")) {
+        setConnectHint("Phantom shares Solana and Ethereum with websites but not Bitcoin. Paste your Bitcoin address (Phantom → Bitcoin → Receive) below to add it to this wallet.");
+        setAddingTo("conn:phantom");
+      }
       setPickerOpen(false);
       onWalletsChanged();
     } catch (e) {
@@ -92,6 +97,19 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
     }
   }
 
+  function addToWallet(walletId: string) {
+    const rejected = api.addAddressesTo(walletId, addText);
+    if (rejected.length) setAddError(`Not recognized: ${rejected.map(shortAddress).join(", ")}`);
+    else {
+      setAddError(null);
+      setAddText("");
+      setAddingTo(null);
+      setConnectHint(null);
+      onWalletsChanged();
+    }
+  }
+
+  const connectedWallets = api.wallets.filter((w) => w.mode === "connected");
   const noExtensions = !api.phantomAvailable && api.evmWallets.length === 0;
 
   return (
@@ -213,10 +231,59 @@ export function WalletsPanel({ api, holdings, scanned, scanning, scanError, onSc
                   {w.mode === "connected" ? "● Connected" : "○ Watch-only"}
                 </span>
                 <span className="ml-auto num text-sm">{scanned ? usd(total) : ""}</span>
+                <button
+                  onClick={() => {
+                    setAddingTo(addingTo === w.id ? null : w.id);
+                    setAddError(null);
+                  }}
+                  title="Add an address to this wallet"
+                  className="rounded-md px-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+                >
+                  +
+                </button>
                 <button onClick={() => api.remove(w.id)} title="Remove" className="rounded-md px-1.5 text-muted hover:bg-surface-2 hover:text-danger">
                   ×
                 </button>
               </div>
+              {addingTo === w.id && (
+                <div className="mt-2 ml-10 rounded-lg border border-line bg-bg/60 p-2">
+                  <input
+                    autoFocus
+                    value={addText}
+                    onChange={(e) => setAddText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addToWallet(w.id)}
+                    spellCheck={false}
+                    placeholder={w.provider === "phantom" ? "Bitcoin address from Phantom → Bitcoin → Receive" : "Address or xpub to add to this wallet"}
+                    className="w-full bg-transparent font-mono text-xs outline-none placeholder:text-muted/70"
+                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <button onClick={() => addToWallet(w.id)} disabled={!addText.trim()} className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-bg disabled:opacity-40">
+                      Add to {w.label}
+                    </button>
+                    <button onClick={() => setAddingTo(null)} className="text-xs text-muted hover:text-ink">
+                      Cancel
+                    </button>
+                    {addError && <span className="text-xs text-danger">{addError}</span>}
+                  </div>
+                </div>
+              )}
+              {w.mode === "watched" && connectedWallets.length > 0 && (
+                <div className="mt-1.5 pl-10 text-[11px] text-muted">
+                  <label>
+                    Attach to{" "}
+                    <select
+                      value=""
+                      onChange={(e) => e.target.value && api.attachWallet(w.id, e.target.value)}
+                      className="rounded border border-line bg-surface px-1 py-0.5 text-[11px] text-ink"
+                    >
+                      <option value="">a wallet…</option>
+                      {connectedWallets.map((c) => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
               <ul className="mt-1.5 space-y-1 pl-10 text-xs">
                 {visible.map((a) => (
                   <li key={a.address} className="flex items-center gap-2">
