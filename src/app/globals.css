@@ -1,45 +1,139 @@
 @import "tailwindcss";
 
+/* Design tokens, ported from the design handoff. Every colour, size and radius in the UI comes
+   from here; mobile and desktop share all of it except the layout block at the end. */
 :root {
-  --bg: #0d0e0c;
-  --surface: #151714;
-  --surface-2: #1c1f1b;
-  --line: #2a2e28;
-  --ink: #eeeae0;
-  --muted: #8f8c82;
-  --accent: #c8f169;
-  --danger: #f0776b;
+  /* Ground and surfaces: tonal, not outlined. A border is reserved for "selected" or "live". */
+  --ground: #0a0a09;
+  --ground-nav: #0c0c0b;
+  --surface: #101010;
+  --surface-input: #131312;
+  --surface-track: #141413;
+  --surface-control: #161615;
+  --surface-nav-on: #191917;
+  --surface-raised: #23221f;
+  --hairline: #161615;
+
+  --surface-live: #1b2410;
+  --surface-live-2: #141a0c;
+  --border-live: #c8f171;
+
+  --text: #edeae2;
+  --text-2: #96938a;
+  --text-3: #65625b;
+  --text-4: #55524c;
+  --rule: #3f3d38;
+
+  /* Accent has two jobs only: a primary action, or the single thing that changed. */
+  --accent: #c8f171;
+  --accent-ink: #0e1403;
+  --accent-dim: #8fa463;
+  --accent-text: #b9bfa8;
+
+  --warn: #e8a24a;
+  --risk: #e8724a;
+
+  /* Chart / asset classes */
+  --c-eth: #8e8fe8;
+  --c-btc: #e8a24a;
+  --c-stable: #9fb4c7;
+  --c-stocks: #a8d99b;
+  --c-sol: #5cc9b6;
+  --c-alts: #d98bb0;
+  --c-track: #171716;
+
+  /* Wallet marks */
+  --w-metamask: #e8923a;
+  --w-metamask-ink: #1a1203;
+  --w-phantom: #9a8cf0;
+  --w-phantom-ink: #130b2e;
+
+  /* Layout: mobile */
+  --gutter: 24px;
+  --tabbar: 78px;
+  /* Layout: desktop */
+  --sidebar: 248px;
+  --gutter-lg: 44px;
+  --gap-col: 44px;
+  --col-aside: 420px;
 }
 
 @theme inline {
-  --color-bg: var(--bg);
+  --color-ground: var(--ground);
+  --color-ground-nav: var(--ground-nav);
   --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-line: var(--line);
-  --color-ink: var(--ink);
-  --color-muted: var(--muted);
+  --color-surface-input: var(--surface-input);
+  --color-surface-track: var(--surface-track);
+  --color-surface-control: var(--surface-control);
+  --color-surface-nav-on: var(--surface-nav-on);
+  --color-surface-raised: var(--surface-raised);
+  --color-hairline: var(--hairline);
+  --color-surface-live: var(--surface-live);
+  --color-surface-live-2: var(--surface-live-2);
+  --color-live: var(--border-live);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-ink-4: var(--text-4);
+  --color-rule: var(--rule);
   --color-accent: var(--accent);
-  --color-danger: var(--danger);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-serif);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-text: var(--accent-text);
+  --color-warn: var(--warn);
+  --color-risk: var(--risk);
+
+  /* Three faces, three jobs: display is the product's voice, mono is machine-read values only. */
+  --font-display: var(--font-instrument-serif), Georgia, serif;
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+
+  --text-hero: 40px;
+  --text-hero-lg: 46px;
+  --text-display: 31px;
+  --text-page-title: 30px;
+  --text-title: 24px;
+  --text-wordmark: 20px;
+  --text-row: 14px;
+  --text-body: 13px;
+  --text-label: 12.5px;
+  --text-meta: 11.5px;
+  --text-tab: 10px;
+
+  --radius-pill: 999px;
+  --radius-card: 22px;
+  --radius-card-sm: 18px;
+  --radius-control: 15px;
+  --radius-input: 12px;
+  --radius-nav: 11px;
+
+  --spacing-tap: 44px;
+  --spacing-gutter: var(--gutter);
+  --spacing-gutter-lg: var(--gutter-lg);
+  --spacing-tabbar: var(--tabbar);
+  --spacing-sidebar: var(--sidebar);
+  --spacing-gap-col: var(--gap-col);
+  --spacing-col-aside: var(--col-aside);
 }
 
 body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(60rem 30rem at 85% -10%, rgb(200 241 105 / 0.07), transparent 70%);
+button:not(:disabled),
+[role="switch"]:not(:disabled) {
+  cursor: pointer;
 }
 
+:focus-visible {
+  outline: 2px solid var(--text-2);
+  outline-offset: 2px;
+}
+
+/* Machine-read values: amounts, percentages, thresholds, addresses, dates in lists. */
 .num {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
