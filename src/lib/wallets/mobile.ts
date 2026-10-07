@@ -9,11 +9,12 @@ export type MobileWalletId = "phantom" | "okx" | "binance" | "metamask";
 /** `app` is a custom-scheme deep link that only works when the app is installed; `web` is the universal link. */
 export type WalletBrowserLinks = Record<MobileWalletId, { app?: string; web: string }>;
 
-export const MOBILE_WALLETS: { id: MobileWalletId; label: string; chains: string }[] = [
-  { id: "phantom", label: "Phantom", chains: "Solana · Ethereum · Bitcoin in one connection" },
-  { id: "okx", label: "OKX Wallet", chains: "Solana · Ethereum · Bitcoin in one connection" },
-  { id: "binance", label: "Binance Wallet", chains: "Solana · Ethereum · Bitcoin in one connection" },
-  { id: "metamask", label: "MetaMask", chains: "Ethereum, L2s and Hyperliquid" },
+/** What each one speaks is worded by the dictionary (`connect.mobileChains`). */
+export const MOBILE_WALLETS: { id: MobileWalletId; label: string }[] = [
+  { id: "phantom", label: "Phantom" },
+  { id: "okx", label: "OKX Wallet" },
+  { id: "binance", label: "Binance Wallet" },
+  { id: "metamask", label: "MetaMask" },
 ];
 
 /**

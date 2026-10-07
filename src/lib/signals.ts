@@ -2,6 +2,7 @@ export type SignalId = "berk" | "cape" | "fng" | "w200" | "mvrv" | "dom" | "fund
 
 export type SignalStatus = "fired" | "close" | "quiet" | "unavailable";
 
+/** `name`, `fires` and `crossed` are the English wording; the UI reads the dictionary by `id`. */
 export interface SignalDef {
   id: SignalId;
   group: "markets" | "crypto";
@@ -14,10 +15,8 @@ export interface SignalDef {
   defaultOn: boolean;
 }
 
-export const SIGNAL_GROUPS: { id: SignalDef["group"]; label: string }[] = [
-  { id: "markets", label: "Wider markets" },
-  { id: "crypto", label: "Crypto" },
-];
+/** Display order of the groups; their names live in the dictionary (`signals.groups`). */
+export const SIGNAL_GROUPS: SignalDef["group"][] = ["markets", "crypto"];
 
 export const SIGNALS: SignalDef[] = [
   { id: "berk", group: "markets", name: "Berkshire cash at a record", fires: "on a new high", crossed: "Berkshire's cash pile set a record", defaultOn: true },

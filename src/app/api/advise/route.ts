@@ -1,7 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
-import { generateAdvice } from "@/lib/advisor";
+import { AdviceError, generateAdvice } from "@/lib/advisor";
 import { CATEGORY_LABELS } from "@/lib/classify";
+import { dict, localeFromRequest } from "@/lib/i18n";
 import { getMarketSnapshot } from "@/lib/market";
 import { HORIZONS, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
@@ -72,21 +73,23 @@ const RequestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const locale = localeFromRequest(request);
+  const t = dict(locale).api;
   const session = await readSession(request);
-  if (!session) return Response.json({ error: "Verify a wallet to run the advisor.", code: "auth" }, { status: 401 });
+  if (!session) return Response.json({ error: t.verifyToRun, code: "auth" }, { status: 401 });
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: t.invalidRequest }, { status: 400 });
   const { personaId, risk, horizon, allowPerps, holdings, positions } = parsed.data;
   const persona = getPersona(personaId);
-  if (!persona) return Response.json({ error: "Unknown investor persona." }, { status: 400 });
+  if (!persona) return Response.json({ error: t.unknownPersona }, { status: 400 });
 
   if (!process.env.ANTHROPIC_API_KEY)
-    return Response.json({ error: "Set ANTHROPIC_API_KEY in .env.local to enable the advisor." }, { status: 500 });
+    return Response.json({ error: t.noApiKey }, { status: 500 });
 
   try {
     const [market, venues] = await Promise.all([getMarketSnapshot(), getHyperliquidVenues()]);
-    const cacheKey = await adviceCacheKey(holdings, { personaId, risk, horizon, allowPerps }, market.regime);
+    const cacheKey = await adviceCacheKey(holdings, { personaId, risk, horizon, allowPerps, locale }, market.regime);
     const cached = await cacheGet<Awaited<ReturnType<typeof generateAdvice>>>(cacheKey);
     if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), market, cached: true });
 
@@ -98,20 +101,18 @@ export async function POST(request: Request) {
       hit(`adv:ip:${clientIp(request)}:${hour}`, ADVICE_PER_HOUR, 3600),
     ]);
     if (!global.ok)
-      return Response.json({ error: "The advisor has reached today's global limit. It resets at midnight UTC.", code: "cap" }, { status: 503 });
-    if (!perWallet.ok) return tooMany(`This wallet has used today's ${ADVICE_PER_WALLET_DAY} analyses. More tomorrow.`, perWallet.retryAfterSec);
-    if (!perIp.ok) return tooMany(`Too many analyses from your network. Try again in ${Math.ceil(perIp.retryAfterSec / 60)} min.`, perIp.retryAfterSec);
+      return Response.json({ error: t.globalLimit, code: "cap" }, { status: 503 });
+    if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
+    if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
 
-    const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, allowPerps, market, venues });
+    const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, allowPerps, market, venues, locale });
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError)
-      return Response.json({ error: "Missing or invalid ANTHROPIC_API_KEY on the server." }, { status: 500 });
-    if (e instanceof Anthropic.RateLimitError)
-      return Response.json({ error: "Rate limited by the Claude API. Try again in a minute." }, { status: 429 });
-    if (e instanceof Anthropic.APIError)
-      return Response.json({ error: `Claude API error: ${e.message}` }, { status: 502 });
-    return Response.json({ error: e instanceof Error ? e.message : "Something went wrong." }, { status: 500 });
+    if (e instanceof AdviceError) return Response.json({ error: t[e.code] }, { status: 502 });
+    if (e instanceof Anthropic.AuthenticationError) return Response.json({ error: t.badApiKey }, { status: 500 });
+    if (e instanceof Anthropic.RateLimitError) return Response.json({ error: t.claudeRateLimited }, { status: 429 });
+    if (e instanceof Anthropic.APIError) return Response.json({ error: t.claudeError(e.message) }, { status: 502 });
+    return Response.json({ error: e instanceof Error ? e.message : t.somethingWrong }, { status: 500 });
   }
 }

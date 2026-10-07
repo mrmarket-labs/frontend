@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { FEE_BPS, FEE_WALLET_EVM } from "@/lib/fees";
+import { dict, localeFromRequest } from "@/lib/i18n";
 import { clientIp, hit, tooMany } from "@/lib/limits";
 import { EVM_CHAIN_IDS } from "@/lib/tokens";
 
@@ -27,12 +28,13 @@ interface ZeroXQuote {
 }
 
 export async function GET(request: Request) {
+  const t = dict(localeFromRequest(request)).api;
   const limit = await hit(`swap:ip:${clientIp(request)}:${Math.floor(Date.now() / 3_600_000)}`, 120, 3600);
-  if (!limit.ok) return tooMany("Too many quote requests. Try again in a few minutes.", limit.retryAfterSec);
+  if (!limit.ok) return tooMany(t.tooManyQuotes, limit.retryAfterSec);
   if (!ZEROX_API_KEY)
-    return Response.json({ error: "EVM swaps aren't enabled yet: the server has no 0x API key." }, { status: 503 });
+    return Response.json({ error: t.evmNotEnabled }, { status: 503 });
   const parsed = RequestSchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-  if (!parsed.success) return Response.json({ error: "Invalid swap request." }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: t.invalidSwap }, { status: 400 });
   const { chainId, sellToken, buyToken, sellAmount, taker } = parsed.data;
 
   const params = new URLSearchParams({
@@ -56,9 +58,9 @@ export async function GET(request: Request) {
     });
     const quote = (await res.json()) as ZeroXQuote & { message?: string; name?: string };
     if (!res.ok) return Response.json({ error: quote.message ?? `0x responded ${res.status}` }, { status: 502 });
-    if (!quote.liquidityAvailable) return Response.json({ error: "No liquidity for this pair right now." }, { status: 409 });
+    if (!quote.liquidityAvailable) return Response.json({ error: t.noLiquidity }, { status: 409 });
     if (quote.issues?.balance)
-      return Response.json({ error: "The wallet doesn't hold enough of the token to sell." }, { status: 409 });
+      return Response.json({ error: t.insufficientBalance }, { status: 409 });
 
     return Response.json({
       sellAmount: quote.sellAmount,
@@ -71,6 +73,6 @@ export async function GET(request: Request) {
       transaction: quote.transaction,
     });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "Could not get a quote." }, { status: 502 });
+    return Response.json({ error: e instanceof Error ? e.message : t.couldNotQuote }, { status: 502 });
   }
 }

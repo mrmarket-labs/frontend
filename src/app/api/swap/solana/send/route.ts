@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { rpc } from "@/lib/http";
+import { dict, localeFromRequest } from "@/lib/i18n";
 
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
@@ -12,8 +13,9 @@ const RequestSchema = z.object({
  * skipping it here lets the client rebroadcast the same bytes every couple of seconds.
  */
 export async function POST(request: Request) {
+  const t = dict(localeFromRequest(request)).api;
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Invalid transaction." }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: t.invalidTransaction }, { status: 400 });
   try {
     const signature = await rpc<string>(SOLANA_RPC, "sendTransaction", [
       parsed.data.signedTransaction,
@@ -21,6 +23,6 @@ export async function POST(request: Request) {
     ]);
     return Response.json({ signature });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "Could not send the transaction." }, { status: 502 });
+    return Response.json({ error: e instanceof Error ? e.message : t.couldNotSend }, { status: 502 });
   }
 }

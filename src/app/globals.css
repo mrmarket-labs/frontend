@@ -52,6 +52,11 @@
   --w-binance: #f0b90b;
   --w-binance-ink: #1a1403;
 
+  /* Font stacks. The Google faces only ship Latin glyphs; everything after them is what a
+     Chinese reader's system falls back to for CJK text. */
+  --font-stack-display: var(--font-instrument-serif), Georgia, serif;
+  --font-stack-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+
   /* Layout: mobile */
   --gutter: 24px;
   --tabbar: 78px;
@@ -87,9 +92,10 @@
   --color-warn: var(--warn);
   --color-risk: var(--risk);
 
-  /* Three faces, three jobs: display is the product's voice, mono is machine-read values only. */
-  --font-display: var(--font-instrument-serif), Georgia, serif;
-  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  /* Three faces, three jobs: display is the product's voice, mono is machine-read values only.
+     The stacks are indirected through :root so a language can swap in its own fallbacks. */
+  --font-display: var(--font-stack-display);
+  --font-sans: var(--font-stack-sans);
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 
   --text-hero: 40px;
@@ -120,10 +126,17 @@
   --spacing-col-aside: var(--col-aside);
 }
 
+/* Simplified Chinese: keep the Latin faces for tickers and numbers, pair them with CJK faces
+   of the same family (a serif for the voice, a sans for the body). */
+html[lang="zh-CN"] {
+  --font-stack-display: var(--font-instrument-serif), "Songti SC", "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", SimSun, Georgia, serif;
+  --font-stack-sans: var(--font-space-grotesk), "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
 body {
   background: var(--ground);
   color: var(--text);
-  font-family: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-stack-sans);
 }
 
 button:not(:disabled),

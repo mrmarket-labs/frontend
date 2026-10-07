@@ -1,19 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { errorMessage } from "@/lib/i18n";
+import { useT } from "@/lib/i18n/context";
 import type { Holding } from "@/lib/types";
-import type { AddressKind, Wallet, WalletAddress } from "@/lib/wallets/types";
+import type { Wallet, WalletAddress } from "@/lib/wallets/types";
 import { sameAddress, shortAddress } from "@/lib/wallets/types";
 import { MOBILE_WALLETS, openInWallet } from "@/lib/wallets/mobile";
-import { chainsOf } from "@/lib/wallets/registry";
+import { chainsOf, type DiscoveredWallet } from "@/lib/wallets/registry";
 import type { WalletsApi } from "@/lib/wallets/useWallets";
+import { LanguageSwitch } from "./LanguageSwitch";
 import { BTN_PRIMARY, BTN_TONAL, SectionLabel, Spinner, WalletMark, usd } from "./ui";
-
-const KIND_LABELS: Record<AddressKind, string> = {
-  evm: "Ethereum · L2s · Hyperliquid",
-  solana: "Solana",
-  bitcoin: "Bitcoin",
-};
 
 const INPUT = "w-full rounded-input bg-surface-input px-3 text-body outline-none placeholder:text-ink-3 focus-visible:outline-2";
 
@@ -26,12 +23,13 @@ function ManageWallet({ wallet, api, connected, onChanged, onClose, startAdding 
   onClose: () => void;
   startAdding: boolean;
 }) {
+  const t = useT();
   const [addText, setAddText] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
 
   function add() {
     const rejected = api.addAddressesTo(wallet.id, addText);
-    if (rejected.length) return setAddError(`Not recognized: ${rejected.map(shortAddress).join(", ")}`);
+    if (rejected.length) return setAddError(t.connect.notRecognized(rejected.map(shortAddress).join(", ")));
     setAddError(null);
     setAddText("");
     onChanged();
@@ -41,7 +39,7 @@ function ManageWallet({ wallet, api, connected, onChanged, onClose, startAdding 
   return (
     <div className="mt-3 ml-[41px] flex flex-col gap-2.5">
       <label className="block">
-        <span className="text-meta text-ink-3">Name</span>
+        <span className="text-meta text-ink-3">{t.connect.name}</span>
         <input
           defaultValue={wallet.label}
           onBlur={(e) => e.target.value.trim() && api.rename(wallet.id, e.target.value.trim())}
@@ -50,7 +48,7 @@ function ManageWallet({ wallet, api, connected, onChanged, onClose, startAdding 
         />
       </label>
       <label className="block">
-        <span className="text-meta text-ink-3">Add an address to this wallet</span>
+        <span className="text-meta text-ink-3">{t.connect.addAddress}</span>
         <span className="mt-1 flex gap-2">
           <input
             autoFocus={startAdding}
@@ -58,24 +56,24 @@ function ManageWallet({ wallet, api, connected, onChanged, onClose, startAdding 
             onChange={(e) => setAddText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addText.trim() && add()}
             spellCheck={false}
-            placeholder={wallet.provider === "phantom" ? "Bitcoin address from Phantom → Receive" : "Address or xpub"}
+            placeholder={wallet.provider === "phantom" ? t.connect.placeholderPhantomBtc : t.connect.placeholderAddress}
             className={`${INPUT} num h-tap min-w-0 flex-1`}
           />
           <button type="button" onClick={add} disabled={!addText.trim()} className={`${BTN_TONAL} h-tap px-4`}>
-            Add
+            {t.connect.add}
           </button>
         </span>
       </label>
       {addError && <p role="alert" className="text-meta text-risk">{addError}</p>}
       {wallet.mode === "watched" && connected.length > 0 && (
         <label className="block">
-          <span className="text-meta text-ink-3">Belongs to a connected wallet?</span>
+          <span className="text-meta text-ink-3">{t.connect.belongsTo}</span>
           <select
             value=""
             onChange={(e) => e.target.value && api.attachWallet(wallet.id, e.target.value)}
             className={`${INPUT} mt-1 h-tap`}
           >
-            <option value="">Attach to…</option>
+            <option value="">{t.connect.attachTo}</option>
             {connected.map((c) => (
               <option key={c.id} value={c.id}>{c.label}</option>
             ))}
@@ -90,7 +88,7 @@ function ManageWallet({ wallet, api, connected, onChanged, onClose, startAdding 
         }}
         className="h-tap self-start text-body text-ink-2 underline underline-offset-2 hover:text-ink"
       >
-        Remove this wallet
+        {t.connect.removeWallet}
       </button>
     </div>
   );
@@ -113,6 +111,7 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   onBack?: () => void;
   footer?: React.ReactNode;
 }) {
+  const t = useT();
   const [panel, setPanel] = useState<"picker" | "watch" | null>(null);
   const [watchText, setWatchText] = useState("");
   const [watchError, setWatchError] = useState<string | null>(null);
@@ -125,6 +124,12 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   const walletTotal = (w: Wallet) => w.addresses.reduce((s, a) => s + valueOf(a), 0);
   const total = holdings.reduce((s, h) => s + h.valueUsd, 0);
 
+  /** "Solana · Ethereum · Bitcoin in one connection", in the current language. */
+  const speaks = (w: DiscoveredWallet) =>
+    t.connect.chainsOf(
+      chainsOf(w).map((c) => (c === "solana" ? t.chains.solana : c === "evm" ? t.chains.ethereum : c === "evm-only" ? t.connect.evmFull : t.chains.bitcoin)),
+    );
+
   async function connect(key: string, name: string) {
     setConnecting(true);
     setConnectError(null);
@@ -133,22 +138,22 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
       const added = await api.connect(key);
       // Newer Phantom builds no longer hand out Bitcoin addresses to websites.
       if (key === "phantom" && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin")) {
-        setConnectHint(`${name} shares Solana and Ethereum with websites but not Bitcoin. Paste your Bitcoin address (${name} → Bitcoin → Receive) to add it to this wallet.`);
+        setConnectHint(t.connect.phantomBtcHint(name));
         setManaging({ id: `conn:${key}`, adding: true });
       }
       setPanel(null);
       onWalletsChanged();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setConnectError(/reject|denied|cancel/i.test(msg) ? "Connection cancelled in the wallet." : msg);
+      const msg = errorMessage(e, t);
+      setConnectError(/reject|denied|cancel/i.test(msg) ? t.connect.connectionCancelled : msg);
     } finally {
       setConnecting(false);
     }
   }
 
   function addWatched() {
-    const rejected = api.addWatched(watchText);
-    if (rejected.length) return setWatchError(`Not recognized: ${rejected.map(shortAddress).join(", ")}`);
+    const rejected = api.addWatched(watchText, t.connect.watchedLabel);
+    if (rejected.length) return setWatchError(t.connect.notRecognized(rejected.map(shortAddress).join(", ")));
     setWatchError(null);
     setWatchText("");
     setPanel(null);
@@ -161,23 +166,24 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-1 flex-col lg:grid lg:max-w-[1040px] lg:grid-cols-[minmax(0,1fr)_440px] lg:content-center lg:items-center lg:gap-x-gap-col lg:px-gutter-lg lg:py-11">
       <div>
-        <div className="flex items-baseline justify-between px-gutter pt-6 lg:px-0 lg:pt-0">
-          <span className="font-display text-wordmark">Diversify</span>
-          {onBack ? (
-            <button type="button" onClick={onBack} className="-my-3 h-tap text-body text-ink-2 hover:text-ink">
-              <span className="font-mono">←</span> Portfolio
-            </button>
-          ) : (
-            <span className="text-meta text-ink-4">Not financial advice</span>
-          )}
+        <div className="flex items-center justify-between px-gutter pt-6 lg:px-0 lg:pt-0">
+          <span className="font-display text-wordmark">{t.common.appName}</span>
+          <span className="flex items-center gap-3">
+            <LanguageSwitch />
+            {onBack ? (
+              <button type="button" onClick={onBack} className="-my-3 h-tap text-body text-ink-2 hover:text-ink">
+                <span className="font-mono">←</span> {t.connect.backToPortfolio}
+              </button>
+            ) : (
+              <span className="text-meta text-ink-4">{t.common.notFinancialAdvice}</span>
+            )}
+          </span>
         </div>
 
         <div className="px-gutter pt-[34px] lg:px-0 lg:pt-14">
-          <h1 className="font-display text-display leading-[1.02] tracking-[-0.2px] lg:text-hero-lg">The best crypto strategy is to hold.</h1>
-          <p className="mt-1 font-display text-display leading-[1.02] text-accent italic lg:text-hero-lg">Are you holding the right assets?</p>
-          <p className="mt-4 max-w-[34em] text-body leading-normal text-ink-2">
-            Add every wallet you want watched. Read-only until you sign a trade — no keys, no approvals.
-          </p>
+          <h1 className="font-display text-display leading-[1.02] tracking-[-0.2px] lg:text-hero-lg">{t.connect.heroLine1}</h1>
+          <p className="mt-1 font-display text-display leading-[1.02] text-accent italic lg:text-hero-lg">{t.connect.heroLine2}</p>
+          <p className="mt-4 max-w-[34em] text-body leading-normal text-ink-2">{t.connect.intro}</p>
         </div>
         {footer && <div className="mt-10 hidden max-w-[34em] lg:block">{footer}</div>}
       </div>
@@ -185,15 +191,11 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
       <div className="flex flex-1 flex-col lg:flex-none">
         <div className="mx-gutter mt-7 flex flex-1 flex-col rounded-card bg-surface p-4 lg:mx-0 lg:mt-0 lg:min-h-[420px]">
           <div className="flex items-center justify-between">
-            <SectionLabel>Your wallets</SectionLabel>
+            <SectionLabel>{t.connect.yourWallets}</SectionLabel>
             {scanned && <span className="num text-meta">{usd(total)}</span>}
           </div>
 
-          {api.ready && api.wallets.length === 0 && (
-            <p className="mt-3.5 text-body leading-normal text-ink-2">
-              No wallets yet. Connect one, or paste any address to watch it without connecting.
-            </p>
-          )}
+          {api.ready && api.wallets.length === 0 && <p className="mt-3.5 text-body leading-normal text-ink-2">{t.connect.empty}</p>}
 
           <ul>
             {api.wallets.map((w, i) => {
@@ -212,12 +214,12 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
                     <WalletMark wallet={w} size={30} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-row font-medium">{w.label}</span>
-                      <span className="block truncate text-meta text-ink-2">{kinds.map((k) => KIND_LABELS[k]).join(" · ")}</span>
+                      <span className="block truncate text-meta text-ink-2">{kinds.map((k) => t.kinds[k]).join(" · ")}</span>
                     </span>
                     <span className="text-right">
                       {scanned && <span className="num block text-row">{usd(worth)}</span>}
                       <span className={`block text-meta ${w.mode === "connected" ? "text-accent" : "text-ink-3"}`}>
-                        {w.mode === "connected" ? "● connected" : "○ watch-only"}
+                        {w.mode === "connected" ? t.connect.connected : t.connect.watchOnly}
                       </span>
                     </span>
                   </button>
@@ -267,16 +269,14 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
                   <WalletMark wallet={{ provider: w.key, mode: "connected", label: w.name }} size={30} />
                   <span>
                     <span className="block text-row font-medium">{w.name}</span>
-                    <span className="block text-meta text-ink-2">{chainsOf(w)}</span>
+                    <span className="block text-meta text-ink-2">{speaks(w)}</span>
                   </span>
                 </button>
               ))}
               {noExtensions && api.mobileLinks && (
                 <>
-                  <p className="text-meta leading-normal text-ink-2">
-                    A phone browser cannot reach your wallet app from here. Open this page inside the wallet instead, then connect there.
-                  </p>
-                  {MOBILE_WALLETS.map(({ id, label, chains }) => (
+                  <p className="text-meta leading-normal text-ink-2">{t.connect.mobileIntro}</p>
+                  {MOBILE_WALLETS.map(({ id, label }) => (
                     <a
                       key={id}
                       href={api.mobileLinks![id].web}
@@ -288,23 +288,19 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
                     >
                       <WalletMark wallet={{ provider: id, mode: "connected", label }} size={30} />
                       <span className="min-w-0 flex-1">
-                        <span className="block text-row font-medium">Open in {label}</span>
-                        <span className="block text-meta text-ink-2">{chains}</span>
+                        <span className="block text-row font-medium">{t.connect.openIn(label)}</span>
+                        <span className="block text-meta text-ink-2">{t.connect.mobileChains[id]}</span>
                       </span>
                       <span className="font-mono text-body text-ink-2">↗</span>
                     </a>
                   ))}
-                  <p className="text-meta leading-normal text-ink-3">No wallet app? Watch an address instead; it reads balances without connecting.</p>
+                  <p className="text-meta leading-normal text-ink-3">{t.connect.noAppHint}</p>
                 </>
               )}
-              {noExtensions && !api.mobileLinks && (
-                <p className="text-meta leading-normal text-ink-2">
-                  No wallet extension found in this browser. Install Phantom, OKX Wallet, Binance Wallet or MetaMask, or watch an address instead.
-                </p>
-              )}
+              {noExtensions && !api.mobileLinks && <p className="text-meta leading-normal text-ink-2">{t.connect.noExtension}</p>}
               {connecting && (
                 <p className="flex items-center gap-2 text-meta text-ink-2">
-                  <Spinner /> Waiting for the wallet…
+                  <Spinner /> {t.connect.waiting}
                 </p>
               )}
               {connectError && <p role="alert" className="text-meta text-risk">{connectError}</p>}
@@ -314,22 +310,22 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
           {panel === "watch" && (
             <div className="mb-2.5">
               <label className="block">
-                <span className="text-meta text-ink-3">Address to watch</span>
+                <span className="text-meta text-ink-3">{t.connect.addressToWatch}</span>
                 <textarea
                   value={watchText}
                   onChange={(e) => setWatchText(e.target.value)}
                   rows={2}
                   spellCheck={false}
                   autoFocus
-                  placeholder="Solana, Ethereum (0x…), Bitcoin address or xpub. One per line."
+                  placeholder={t.connect.watchPlaceholder}
                   className={`${INPUT} num mt-1 resize-y py-2.5`}
                 />
               </label>
               <div className="mt-2 flex items-center gap-3">
                 <button type="button" onClick={addWatched} disabled={!watchText.trim()} className={`${BTN_TONAL} h-tap px-4`}>
-                  Watch
+                  {t.connect.watch}
                 </button>
-                <span className="text-meta leading-normal text-ink-3">Counts toward your portfolio; trades from it stay manual.</span>
+                <span className="text-meta leading-normal text-ink-3">{t.connect.watchNote}</span>
               </div>
               {watchError && <p role="alert" className="mt-2 text-meta text-risk">{watchError}</p>}
             </div>
@@ -340,10 +336,10 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
                 if (panel !== "picker") api.refresh();
                 setPanel(panel === "picker" ? null : "picker");
               }} className={`${BTN_TONAL} h-tap flex-1 rounded-input`}>
-              + Wallet
+              {t.connect.addWalletButton}
             </button>
             <button type="button" aria-expanded={panel === "watch"} onClick={() => setPanel(panel === "watch" ? null : "watch")} className={`${BTN_TONAL} h-tap flex-1 rounded-input`}>
-              + Watch address
+              {t.connect.watchAddressButton}
             </button>
           </div>
         </div>
@@ -351,13 +347,13 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
         <div className="px-gutter pt-5 pb-[26px] lg:px-0 lg:pb-0">
           <button type="button" onClick={onScan} disabled={scanning || api.wallets.length === 0} className={`${BTN_PRIMARY} h-[52px] w-full`}>
             {scanning && <Spinner />}
-            {scanning ? "Scanning chains…" : scanned ? "Rescan portfolio" : "Scan my portfolio"}
+            {scanning ? t.connect.scanning : scanned ? t.connect.rescan : t.connect.scan}
             {!scanning && <span className="font-mono">→</span>}
           </button>
           {scanError ? (
             <p role="alert" className="mt-2.5 text-center text-meta text-risk">{scanError}</p>
           ) : (
-            <p className="mt-2.5 text-center text-meta text-ink-3">Looking costs nothing and signs nothing.</p>
+            <p className="mt-2.5 text-center text-meta text-ink-3">{t.connect.freeNote}</p>
           )}
           {footer && <div className="mt-6 lg:hidden">{footer}</div>}
         </div>

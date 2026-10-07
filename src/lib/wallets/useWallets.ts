@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AppError } from "../i18n";
 import { isMobileBrowser, walletBrowserLinks, type WalletBrowserLinks } from "./mobile";
 import { connectWallet, getWallet, getWallets, subscribeWallets, type DiscoveredWallet } from "./registry";
 import { loadWallets, saveWallets, watchedWallet } from "./store";
@@ -50,8 +51,9 @@ export function useWallets() {
     return subscribeWallets(() => setAvailable(getWallets()));
   }, []);
 
+  /** `label` names the n-th watched wallet ("Watched 2"), in the user's language. */
   const addWatched = useCallback(
-    (input: string): string[] => {
+    (input: string, label: (n: number) => string): string[] => {
       const rejected: string[] = [];
       setWallets((prev) => {
         let next = prev;
@@ -62,7 +64,7 @@ export function useWallets() {
           }
           if (next.some((w) => w.addresses.some((a) => sameAddress(a.address, raw)))) continue;
           const n = next.filter((w) => w.mode === "watched").length + 1;
-          next = [...next, watchedWallet(raw, `Watched ${n}`)];
+          next = [...next, watchedWallet(raw, label(n))];
         }
         return next;
       });
@@ -77,7 +79,7 @@ export function useWallets() {
   const connect = useCallback(
     async (key: string): Promise<WalletAddress[]> => {
       const info = getWallet(key);
-      if (!info) throw new Error("Wallet not found.");
+      if (!info) throw new AppError("walletNotFound");
       const addresses = await connectWallet(info);
       setWallets((prev) => mergeConnected(prev, info.key, info.name, addresses));
       return addresses;

@@ -1,7 +1,7 @@
-import { VENUE_LABELS, type Venue } from "./options";
+import type { Dict } from "./i18n";
+import type { Venue } from "./options";
 import type { Trade } from "./rebalance";
 import { GAS_RESERVE, L2_CHAINS, NATIVE, WSOL_MINT, isExecChain, resolveToken, type ExecChain, type TokenInfo } from "./tokens";
-import { CHAIN_LABELS } from "./chain-labels";
 import type { Holding } from "./types";
 
 /** Steps below this are not worth the network fee. */
@@ -101,8 +101,12 @@ function mergeSwaps(steps: Step[]): Step[] {
  * Turn the advisor's asset-level trades into concrete steps: direct same-chain swaps where sells
  * and buys share a chain, stablecoin parking where they don't, and manual instructions for venues
  * the app can't execute yet (Bitcoin, Hyperliquid, bridges).
+ *
+ * Step ids carry no text, so the same inputs compile to the same ids in every language and
+ * progress survives a language switch.
  */
-export function compilePlan(holdings: Holding[], trades: Trade[]): Step[] {
+export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step[] {
+  const { steps: s, chains: CHAIN_LABELS, venues: VENUE_LABELS } = t;
   const steps: Step[] = [];
   const minBridge = Math.max(MIN_BRIDGE_USD, holdings.reduce((s, h) => s + h.valueUsd, 0) * 0.01);
   const sells = new Map<ExecChain, SellLeg[]>();
@@ -126,12 +130,8 @@ export function compilePlan(holdings: Holding[], trades: Trade[]): Step[] {
           kind: "manual",
           address: h.address,
           where: CHAIN_LABELS[h.chain],
-          title: `Sell ${usd0(usd)} of ${h.symbol} on ${CHAIN_LABELS[h.chain]}`,
-          detail: h.chain === "bitcoin"
-            ? "Send the BTC to an exchange or use a bridge. Native BTC swaps are coming soon."
-            : isExecChain(h.chain)
-              ? "Rescan the portfolio to enable the in-app swap for this position."
-              : "Place the order on Hyperliquid directly. In-app Hyperliquid execution is next on the roadmap.",
+          title: s.sellTitle(usd0(usd), h.symbol, CHAIN_LABELS[h.chain]),
+          detail: h.chain === "bitcoin" ? s.sellBitcoin : isExecChain(h.chain) ? s.sellRescan : s.sellHyperliquid,
           usd,
         });
     }
@@ -154,16 +154,16 @@ export function compilePlan(holdings: Holding[], trades: Trade[]): Step[] {
       steps.push({
         id: `manual:buy:${venue ?? "unknown"}:${t.asset}`,
         kind: "manual",
-        where: venue ? VENUE_LABELS[venue] : "Unknown venue",
-        title: `Buy ${usd0(t.usd)} of ${instrument}${venue ? ` on ${VENUE_LABELS[venue]}` : ""}`,
+        where: venue ? VENUE_LABELS[venue] : s.unknownVenue,
+        title: s.buyTitle(usd0(t.usd), instrument, venue ? VENUE_LABELS[venue] : null),
         detail:
           venue === "hyperliquid-perp"
-            ? `Open a 1x long on ${instrument} with USDC on Hyperliquid. The position pays funding; in-app execution is coming next.`
+            ? s.buyPerp(instrument)
             : venue === "hyperliquid-spot"
-              ? `Deposit USDC to Hyperliquid (bridging from Arbitrum is cheapest) and place a spot order for ${instrument}. In-app execution is coming next.`
+              ? s.buySpot(instrument)
               : venue === "bitcoin"
-                ? "Buy BTC on an exchange or via a bridge and withdraw to your Bitcoin address. Native BTC swaps are coming soon."
-                : `${instrument} isn't in the app's token list yet, so this one is manual for now.`,
+                ? s.buyBitcoin
+                : s.buyUnlisted(instrument),
         usd: t.usd,
       });
   }
@@ -190,9 +190,9 @@ export function compilePlan(holdings: Holding[], trades: Trade[]): Step[] {
       steps.push({
         id: `manual:fund:stable:${t.asset}`,
         kind: "manual",
-        where: "Any chain",
-        title: `Add ${usd0(remaining)} of ${t.asset}`,
-        detail: `Your sells don't cover the full stablecoin target. Deposit or transfer ${usd0(remaining)} of ${t.asset} to any wallet you hold here.`,
+        where: s.anyChain,
+        title: s.addStableTitle(usd0(remaining), t.asset),
+        detail: s.addStableDetail(usd0(remaining), t.asset),
         usd: remaining,
       });
   }
@@ -232,7 +232,7 @@ export function compilePlan(holdings: Holding[], trades: Trade[]): Step[] {
   // 4. Buys with nothing to fund them on their chain need a bridge: manual for now.
   const surplusNote = [...surplus.entries()]
     .filter(([, v]) => v >= MIN_STEP_USD)
-    .map(([c, v]) => `${usd0(v)} on ${CHAIN_LABELS[c]}`)
+    .map(([c, v]) => s.surplusOn(usd0(v), CHAIN_LABELS[c]))
     .join(", ");
   for (const d of deficits) {
     if (d.usd < MIN_STEP_USD) continue;
@@ -240,10 +240,10 @@ export function compilePlan(holdings: Holding[], trades: Trade[]): Step[] {
       id: `manual:fund:${d.chain}:${d.buy.instrument}`,
       kind: "manual",
       where: CHAIN_LABELS[d.chain],
-      title: `Fund ${CHAIN_LABELS[d.chain]} with ${usd0(d.usd)} and buy ${d.buy.instrument}`,
+      title: s.fundTitle(CHAIN_LABELS[d.chain], usd0(d.usd), d.buy.instrument),
       detail: surplusNote
-        ? `After the swaps above you'll have spare stablecoins (${surplusNote}). Bridge them to ${CHAIN_LABELS[d.chain]} and swap into ${d.buy.instrument}. One-click bridging is coming soon.`
-        : `Move ${usd0(d.usd)} of USDC to ${CHAIN_LABELS[d.chain]} and swap into ${d.buy.instrument}. One-click bridging is coming soon.`,
+        ? s.fundWithSurplus(surplusNote, CHAIN_LABELS[d.chain], d.buy.instrument)
+        : s.fundFromOutside(usd0(d.usd), CHAIN_LABELS[d.chain], d.buy.instrument),
       usd: d.usd,
     });
   }

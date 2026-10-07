@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod/v4";
 import { CATEGORY_LABELS } from "./classify";
+import type { Locale } from "./i18n";
 import { VENUES, type Horizon, type RiskLevel } from "./options";
 import type { Persona } from "./personas";
 import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
@@ -81,6 +82,8 @@ export interface AdviceRequest {
   allowPerps: boolean;
   market: MarketSnapshot;
   venues: HyperliquidVenues | null;
+  /** Language for every free-text field; tickers and venue ids stay as given. */
+  locale: Locale;
 }
 
 function describePortfolio(holdings: Holding[]): string {
@@ -143,6 +146,19 @@ Rules:
 - Leveraged perp positions are exposure on top of the holdings (their margin is already inside the holdings). Account for them in the diagnosis, risk scores and risks, and say plainly whether the persona would keep, reduce or close them. Allocations cover holdings only; never allocate to perps.
 - Be direct and specific. This is educational analysis, not personalized financial advice.`;
 
+const LANGUAGE_RULE: Record<Locale, string> = {
+  en: "Write every free-text field in English.",
+  zh: "Write every free-text field (verdict, diagnosis, marketView, personaTake, rationale, risks, executionTips) in Simplified Chinese. Keep tickers, venue ids and instrument names exactly as given in the universe.",
+};
+
+/** Error texts the route maps to the user's language. */
+export type AdviceErrorCode = "modelDeclined" | "adviceCutOff" | "unexpectedFormat";
+export class AdviceError extends Error {
+  constructor(public readonly code: AdviceErrorCode) {
+    super(code);
+  }
+}
+
 export async function generateAdvice(req: AdviceRequest): Promise<Advice> {
   const client = new Anthropic();
   const prompt = `Investor lens: ${req.persona.name}
@@ -171,13 +187,13 @@ Diagnose the current portfolio and propose the target allocation.`;
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     output_config: { effort: "high", format: betaZodOutputFormat(AdviceSchema) },
-    system: SYSTEM,
+    system: `${SYSTEM}\n- ${LANGUAGE_RULE[req.locale]}`,
     messages: [{ role: "user", content: prompt }],
   });
 
-  if (response.stop_reason === "refusal") throw new Error("The model declined to produce advice for this portfolio.");
-  if (response.stop_reason === "max_tokens") throw new Error("The advice was cut off. Please try again.");
-  if (!response.parsed_output) throw new Error("The model returned an unexpected format.");
+  if (response.stop_reason === "refusal") throw new AdviceError("modelDeclined");
+  if (response.stop_reason === "max_tokens") throw new AdviceError("adviceCutOff");
+  if (!response.parsed_output) throw new AdviceError("unexpectedFormat");
   return normalize(response.parsed_output);
 }
 

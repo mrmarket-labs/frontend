@@ -1,4 +1,5 @@
 import { VersionedTransaction } from "@solana/web3.js";
+import { AppError } from "../i18n";
 import type { Eip1193Provider, WalletAddress } from "./types";
 
 /**
@@ -100,7 +101,7 @@ function wrapSolana(w: WsWallet): SolanaProvider {
       await w.features["standard:connect"]!.connect();
       account = w.accounts.find((a) => a.address === address);
     }
-    if (!account) throw new Error(`${w.name} is on a different account. Switch to ${address.slice(0, 4)}…${address.slice(-4)} and retry.`);
+    if (!account) throw new AppError("differentAccount", { name: w.name, address: `${address.slice(0, 4)}…${address.slice(-4)}` });
     return account;
   };
   return {
@@ -110,13 +111,13 @@ function wrapSolana(w: WsWallet): SolanaProvider {
     },
     async signTransaction(tx, address) {
       const f = w.features["solana:signTransaction"];
-      if (!f) throw new Error(`${w.name} can't sign Solana transactions.`);
+      if (!f) throw new AppError("cantSignTx", { name: w.name });
       const [{ signedTransaction }] = await f.signTransaction({ transaction: tx, account: await accountFor(address), chain: "solana:mainnet" });
       return signedTransaction;
     },
     async signMessage(message, address) {
       const f = w.features["solana:signMessage"];
-      if (!f) throw new Error(`${w.name} can't sign messages.`);
+      if (!f) throw new AppError("cantSignMessage", { name: w.name });
       const [{ signature }] = await f.signMessage({ message, account: await accountFor(address) });
       return signature;
     },
@@ -139,14 +140,14 @@ interface LegacySolana {
 function wrapLegacySolana(name: string, get: () => LegacySolana | undefined): SolanaProvider {
   const provider = () => {
     const p = get();
-    if (!p) throw new Error(`${name} isn't available in this browser. Reconnect it and retry.`);
+    if (!p) throw new AppError("unavailable", { name });
     return p;
   };
   const ensureAccount = async (address: string) => {
     const p = provider();
     if (p.publicKey?.toString() === address) return p;
     const { publicKey } = await p.connect();
-    if (publicKey.toString() !== address) throw new Error(`${name} is on a different account. Switch to ${address.slice(0, 4)}…${address.slice(-4)} and retry.`);
+    if (publicKey.toString() !== address) throw new AppError("differentAccount", { name, address: `${address.slice(0, 4)}…${address.slice(-4)}` });
     return p;
   };
   return {
@@ -284,12 +285,13 @@ export function getWallet(provider: string | undefined): DiscoveredWallet | unde
   return [...wallets.values()].find((w) => w.evm?.rdns === rdns);
 }
 
-export function chainsOf(w: DiscoveredWallet): string {
-  const parts = [];
-  if (w.solana) parts.push("Solana");
-  if (w.evm) parts.push(w.solana || w.bitcoin ? "Ethereum" : "Ethereum, L2s and Hyperliquid");
-  if (w.bitcoin) parts.push("Bitcoin");
-  return parts.length > 1 ? `${parts.join(" · ")} in one connection` : parts[0] ?? "";
+/** Which chains a wallet speaks, for the picker to word: "evm-only" when EVM is all it has. */
+export function chainsOf(w: DiscoveredWallet): ("solana" | "evm" | "evm-only" | "bitcoin")[] {
+  const parts: ("solana" | "evm" | "evm-only" | "bitcoin")[] = [];
+  if (w.solana) parts.push("solana");
+  if (w.evm) parts.push(w.solana || w.bitcoin ? "evm" : "evm-only");
+  if (w.bitcoin) parts.push("bitcoin");
+  return parts;
 }
 
 /**
@@ -318,7 +320,7 @@ export async function connectWallet(w: DiscoveredWallet, opts: { onlyIfTrusted?:
       out.push(...(await bitcoin.requestAccounts()));
     });
   }
-  if (steps.length === 0) throw new Error(`${w.name} doesn't expose any chain this app supports.`);
+  if (steps.length === 0) throw new AppError("noChains", { name: w.name });
   await steps[0]();
   for (const step of steps.slice(1)) {
     try {

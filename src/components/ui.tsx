@@ -1,7 +1,8 @@
+import type { Dict } from "@/lib/i18n";
 import type { Category } from "@/lib/types";
 import type { Wallet } from "@/lib/wallets/types";
-export { CHAIN_LABELS } from "@/lib/chain-labels";
 
+/** Dollar amounts keep the "$1,234" shape in every language: it is how prices read in crypto. */
 export const usd = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 100 ? 2 : 0 });
 
@@ -9,11 +10,10 @@ export const pct = (n: number, digits = 1) => `${n.toFixed(digits)}%`;
 
 export const signed = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
 
-/** "6 Oct", with the year once it is no longer this one. */
-export function shortDate(at: number | string | Date): string {
+/** "6 Oct" / "10月6日", with the year once it is no longer this one. */
+export function shortDate(at: number | string | Date, t: Dict): string {
   const d = new Date(at);
-  const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+  return t.common.shortDate(d, d.getFullYear() === new Date().getFullYear());
 }
 
 /* --- Chart classes ---------------------------------------------------------
@@ -21,13 +21,13 @@ export function shortDate(at: number | string | Date): string {
 
 export type ChartKey = "eth" | "btc" | "stable" | "stocks" | "sol" | "alts";
 
-export const CHART: Record<ChartKey, { color: string; label: string; chip: string }> = {
-  eth: { color: "var(--c-eth)", label: "Ethereum", chip: "Ethereum" },
-  btc: { color: "var(--c-btc)", label: "Bitcoin", chip: "Bitcoin" },
-  stable: { color: "var(--c-stable)", label: "Stablecoins", chip: "Stables" },
-  stocks: { color: "var(--c-stocks)", label: "Tokenized stocks", chip: "Stocks" },
-  sol: { color: "var(--c-sol)", label: "Solana", chip: "Solana" },
-  alts: { color: "var(--c-alts)", label: "Alts", chip: "Alts" },
+export const CHART: Record<ChartKey, { color: string }> = {
+  eth: { color: "var(--c-eth)" },
+  btc: { color: "var(--c-btc)" },
+  stable: { color: "var(--c-stable)" },
+  stocks: { color: "var(--c-stocks)" },
+  sol: { color: "var(--c-sol)" },
+  alts: { color: "var(--c-alts)" },
 };
 
 const CHART_KEY: Record<Category, ChartKey> = {
@@ -54,8 +54,8 @@ export interface Slice {
   weight: number;
 }
 
-/** Roll items up into chart classes, largest first. */
-export function sliceBy<T>(items: T[], category: (t: T) => Category, weight: (t: T) => number): Slice[] {
+/** Roll items up into chart classes, largest first, named in the current language. */
+export function sliceBy<T>(items: T[], category: (t: T) => Category, weight: (t: T) => number, names: Dict["chart"]): Slice[] {
   const total = items.reduce((s, t) => s + weight(t), 0) || 1;
   const sums = new Map<ChartKey, number>();
   const gold = new Set<ChartKey>();
@@ -70,7 +70,7 @@ export function sliceBy<T>(items: T[], category: (t: T) => Category, weight: (t:
     .map(([key, w]) => ({
       key,
       ...CHART[key],
-      ...(gold.has(key) ? { label: "Stocks and gold", chip: "Stocks & gold" } : {}),
+      ...(gold.has(key) ? names.stocksGold : names[key]),
       pct: (w / total) * 100,
       weight: w,
     }));

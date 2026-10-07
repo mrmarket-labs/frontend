@@ -1,3 +1,4 @@
+import { AppError } from "../i18n";
 import type { SwapStep } from "../plan";
 import { EVM_CHAIN_IDS, EVM_CHAIN_PARAMS, NATIVE, ZEROX_NATIVE, fromRawUnits, toRawUnits, type EvmExecChain } from "../tokens";
 import { getWallet } from "./registry";
@@ -113,8 +114,8 @@ async function sendAndConfirmSolana(signedTransaction: string, lastValidBlockHei
       `/api/swap/solana/status?signature=${signature}&lastValidBlockHeight=${lastValidBlockHeight}`,
     );
     if (s.status === "confirmed") return signature;
-    if (s.status === "failed") throw new Error(`Transaction failed on-chain: ${s.error ?? "unknown error"}`);
-    if (s.status === "expired") throw new Error("The transaction expired before it was confirmed. Nothing was spent; get a fresh quote and try again.");
+    if (s.status === "failed") throw new AppError("txFailed", { error: s.error ?? "unknown error" });
+    if (s.status === "expired") throw new AppError("txExpired");
     // Not landed yet: resend the identical bytes (same signature) so it reaches a leader.
     await fetch("/api/swap/solana/send", {
       method: "POST",
@@ -122,12 +123,12 @@ async function sendAndConfirmSolana(signedTransaction: string, lastValidBlockHei
       body: JSON.stringify({ signedTransaction }),
     }).catch(() => undefined);
   }
-  throw new Error("Still unconfirmed after 2.5 minutes. Check the explorer link; if it never lands, nothing was spent.");
+  throw new AppError("txUnconfirmedSolana");
 }
 
 function evmProviderFor(wallet: Wallet): Eip1193Provider {
   const p = getWallet(wallet.provider)?.evm?.provider;
-  if (!p) throw new Error(`${wallet.label} isn't available in this browser. Reconnect it and retry.`);
+  if (!p) throw new AppError("unavailable", { name: wallet.label });
   return p;
 }
 
@@ -138,7 +139,7 @@ async function ensureEvmAccount(provider: Eip1193Provider, address: string): Pro
   const has = (accounts: string[]) => accounts.some((a) => a.toLowerCase() === address.toLowerCase());
   if (has((await provider.request({ method: "eth_accounts" })) as string[])) return;
   if (has((await provider.request({ method: "eth_requestAccounts" })) as string[])) return;
-  throw new Error(`Switch your wallet to ${address.slice(0, 6)}…${address.slice(-4)} and retry.`);
+  throw new AppError("switchAccount", { address: `${address.slice(0, 6)}…${address.slice(-4)}` });
 }
 
 async function ensureEvmChain(provider: Eip1193Provider, chain: EvmExecChain): Promise<void> {
@@ -147,7 +148,7 @@ async function ensureEvmChain(provider: Eip1193Provider, chain: EvmExecChain): P
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
   } catch (e) {
-    if ((e as { code?: number }).code !== 4902) throw new Error(`Switch your wallet to ${EVM_CHAIN_PARAMS[chain].chainName} and retry.`);
+    if ((e as { code?: number }).code !== 4902) throw new AppError("switchChain", { chain: EVM_CHAIN_PARAMS[chain].chainName });
     await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId, ...EVM_CHAIN_PARAMS[chain] }] });
   }
 }
@@ -157,11 +158,11 @@ async function waitEvmReceipt(provider: Eip1193Provider, hash: string): Promise<
     const receipt = (await provider.request({ method: "eth_getTransactionReceipt", params: [hash] })) as { status: string } | null;
     if (receipt) {
       if (receipt.status === "0x1") return;
-      throw new Error("Transaction reverted on-chain.");
+      throw new AppError("txReverted");
     }
     await sleep(3000);
   }
-  throw new Error("Not confirmed after 3 minutes. Check the explorer link before retrying.");
+  throw new AppError("txUnconfirmedEvm");
 }
 
 const pad = (hex: string) => hex.replace(/^0x/, "").padStart(64, "0");
@@ -179,11 +180,11 @@ export async function executeStep(
 ): Promise<string> {
   if (quote.kind === "solana") {
     const solana = getWallet(wallet.provider)?.solana;
-    if (!solana) throw new Error(`${wallet.label} isn't available in this browser. Reconnect it and retry.`);
+    if (!solana) throw new AppError("unavailable", { name: wallet.label });
     // Blockhashes live ~60s, so build the transaction right before the wallet opens.
     const fresh = (await fetchQuote(step)) as SolanaQuote;
     if (BigInt(fresh.minOutAmount) < (BigInt(quote.minOutAmount) * BigInt(99)) / BigInt(100))
-      throw new Error("The price moved more than 1% since this quote. Review the new quote and try again.");
+      throw new AppError("priceMoved");
     onPhase("signing");
     // Sign only; the app broadcasts and rebroadcasts the bytes itself so the swap can't be dropped silently.
     const signed = toBase64(await solana.signTransaction(fromBase64(fresh.swapTransaction), step.address));

@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { FEE_BPS, solanaFeeAccount } from "@/lib/fees";
 import { getJson } from "@/lib/http";
+import { dict, localeFromRequest } from "@/lib/i18n";
 import { clientIp, hit, tooMany } from "@/lib/limits";
 
 // lite-api is keyless and rate-limited; api.jup.ag needs a key but has higher limits.
@@ -38,10 +39,11 @@ interface JupSwap {
 }
 
 export async function POST(request: Request) {
+  const t = dict(localeFromRequest(request)).api;
   const limit = await hit(`swap:ip:${clientIp(request)}:${Math.floor(Date.now() / 3_600_000)}`, 120, 3600);
-  if (!limit.ok) return tooMany("Too many quote requests. Try again in a few minutes.", limit.retryAfterSec);
+  if (!limit.ok) return tooMany(t.tooManyQuotes, limit.retryAfterSec);
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return Response.json({ error: "Invalid swap request." }, { status: 400 });
+  if (!parsed.success) return Response.json({ error: t.invalidSwap }, { status: 400 });
   const { inputMint, outputMint, amount, userPublicKey, slippageBps } = parsed.data;
 
   try {
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
     });
     if (swap.error) return Response.json({ error: swap.error }, { status: 502 });
     if (swap.simulationError)
-      return Response.json({ error: `Swap would fail: ${swap.simulationError.error}` }, { status: 409 });
+      return Response.json({ error: t.swapWouldFail(swap.simulationError.error) }, { status: 409 });
 
     return Response.json({
       inAmount: quote.inAmount,
@@ -83,6 +85,6 @@ export async function POST(request: Request) {
       lastValidBlockHeight: swap.lastValidBlockHeight,
     });
   } catch (e) {
-    return Response.json({ error: e instanceof Error ? e.message : "Could not get a quote." }, { status: 502 });
+    return Response.json({ error: e instanceof Error ? e.message : t.couldNotQuote }, { status: 502 });
   }
 }

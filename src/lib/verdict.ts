@@ -1,4 +1,5 @@
 import type { Advice } from "./advisor";
+import type { Locale } from "./i18n";
 import type { Horizon, RiskLevel } from "./options";
 import type { Step } from "./plan";
 import type { Trade } from "./rebalance";
@@ -14,6 +15,8 @@ export interface Verdict {
   personaId: string;
   risk: RiskLevel;
   horizon: Horizon;
+  /** Language the advisor wrote in; verdicts saved before languages existed have none (English). */
+  locale?: Locale;
   at: number;
 }
 

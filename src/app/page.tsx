@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyzeView } from "@/components/AnalyzeView";
 import { AppShell, type Tab } from "@/components/AppShell";
 import { ConnectView } from "@/components/ConnectView";
@@ -10,6 +10,8 @@ import { SignalsView } from "@/components/SignalsView";
 import { usd } from "@/components/ui";
 import { VerdictView } from "@/components/VerdictView";
 import type { Advice } from "@/lib/advisor";
+import { errorMessage } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n/context";
 import type { Horizon, RiskLevel } from "@/lib/options";
 import { PERSONAS } from "@/lib/personas";
 import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
@@ -23,27 +25,27 @@ import { useWallets } from "@/lib/wallets/useWallets";
 /** connect ──▶ portfolio ──▶ analyze ──▶ verdict; portfolio, verdict and signals are the tabs. */
 type View = "connect" | "analyze" | Tab;
 
-const TITLES: Record<Tab, string> = { portfolio: "Diversify", verdict: "Verdict", signals: "Signals" };
+/** A failed API call: the server's message in the user's language, plus a code where it sends one. */
+class ApiError extends Error {
+  constructor(message: string, public readonly code?: string) {
+    super(message);
+  }
+}
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
+async function postJson<T>(url: string, body: unknown, fallback: (status: number) => string): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(data.error ?? fallback(res.status), data.code);
   return data as T;
 }
 
 function LegalNote() {
-  return (
-    <p className="text-meta leading-relaxed text-ink-4">
-      Diversify analyzes public on-chain balances and market data to produce educational allocation ideas. Swaps are routed through Jupiter and 0x and
-      signed in your own wallet; Diversify charges a 0.5% fee on them and never holds your funds. Investor lenses are inspired by publicly known
-      philosophies and are not affiliated with or endorsed by those people. Nothing here is financial advice; crypto and tokenized assets can lose all
-      their value.
-    </p>
-  );
+  const { t } = useLocale();
+  return <p className="text-meta leading-relaxed text-ink-4">{t.legal}</p>;
 }
 
 export default function Home() {
+  const { locale, t } = useLocale();
   const wallets = useWallets();
   const [view, setView] = useState<View>("connect");
   const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
@@ -65,6 +67,8 @@ export default function Home() {
   const pendingScan = useRef<"stay" | "open" | null>(null);
   const [walletsVersion, setWalletsVersion] = useState(0);
   const [review, setReview] = useState<SwapStep | null>(null);
+
+  const titles: Record<Tab, string> = { portfolio: t.common.appName, verdict: t.common.verdict, signals: t.common.signals };
 
   const go = useCallback((next: View) => {
     setView(next);
@@ -98,15 +102,15 @@ export default function Home() {
       setScanning(true);
       setScanError(null);
       try {
-        setPortfolio(await postJson<PortfolioResponse>("/api/portfolio", { addresses: addresses.join("\n") }));
+        setPortfolio(await postJson<PortfolioResponse>("/api/portfolio", { addresses: addresses.join("\n") }, t.common.requestFailed));
         if (open) go("portfolio");
       } catch (e) {
-        setScanError(e instanceof Error ? e.message : String(e));
+        setScanError(errorMessage(e, t));
       } finally {
         setScanning(false);
       }
     },
-    [addresses, go],
+    [addresses, go, t],
   );
 
   // The address list only settles after a connect/merge finishes, so scan from an effect
@@ -143,8 +147,8 @@ export default function Home() {
     try {
       setSession(await signIn(wallet));
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setSignInError(/reject|denied|cancel/i.test(msg) ? "Signature cancelled in the wallet." : msg);
+      const msg = errorMessage(e, t);
+      setSignInError(/reject|denied|cancel/i.test(msg) ? t.analyze.signatureCancelled : msg);
     } finally {
       setSigningIn(false);
     }
@@ -155,22 +159,20 @@ export default function Home() {
     setAdvising(true);
     setAdviceError(null);
     try {
-      const data = await postJson<{ advice: Advice; trades: Trade[] }>("/api/advise", {
-        holdings: portfolio.holdings,
-        positions: portfolio.positions,
-        personaId,
-        risk,
-        horizon,
-        allowPerps,
-      });
+      const data = await postJson<{ advice: Advice; trades: Trade[] }>(
+        "/api/advise",
+        { holdings: portfolio.holdings, positions: portfolio.positions, personaId, risk, horizon, allowPerps },
+        t.common.requestFailed,
+      );
       const next: Verdict = {
         advice: data.advice,
         trades: data.trades,
         holdings: portfolio.holdings,
-        steps: compilePlan(portfolio.holdings, data.trades),
+        steps: compilePlan(portfolio.holdings, data.trades, t),
         personaId,
         risk,
         horizon,
+        locale,
         at: Date.now(),
       };
       setVerdict(next);
@@ -180,13 +182,16 @@ export default function Home() {
       saveProgress({});
       go("verdict");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (/Verify a wallet/.test(msg)) setSession(null);
-      setAdviceError(msg);
+      if (e instanceof ApiError && e.code === "auth") setSession(null);
+      setAdviceError(errorMessage(e, t));
     } finally {
       setAdvising(false);
     }
   }
+
+  // Step ids are language-free, so the plan is re-worded in the current language on every render
+  // and progress ticked off in one language still shows in the other.
+  const shownVerdict = useMemo(() => (verdict ? { ...verdict, steps: compilePlan(verdict.holdings, verdict.trades, t) } : null), [verdict, t]);
 
   function markDone(step: Step, txId?: string) {
     const next: Progress = { ...progress, [step.id]: { status: "done", txId, manual: step.kind === "manual", at: Date.now() } };
@@ -220,7 +225,7 @@ export default function Home() {
     <>
       <AppShell
         tab={tab}
-        title={TITLES[tab]}
+        title={titles[tab]}
         wallets={wallets.wallets}
         holdings={portfolio.holdings}
         onTab={go}
@@ -228,7 +233,7 @@ export default function Home() {
         hideTabs={shown === "analyze"}
         mobileAction={
           shown === "portfolio" ? (
-            <button type="button" aria-label="Rescan portfolio" disabled={scanning} onClick={() => void scan()} className="flex size-tap items-center justify-center disabled:opacity-40">
+            <button type="button" aria-label={t.shell.rescan} disabled={scanning} onClick={() => void scan()} className="flex size-tap items-center justify-center disabled:opacity-40">
               <span className={`flex size-8 items-center justify-center rounded-full bg-surface-control font-mono text-body text-ink-2 ${scanning ? "animate-spin" : ""}`}>↻</span>
             </button>
           ) : undefined
@@ -236,7 +241,7 @@ export default function Home() {
         mobileBar={
           shown === "analyze" ? (
             <div className="flex items-center justify-between">
-              <button type="button" aria-label="Back to portfolio" onClick={() => go("portfolio")} className="flex size-tap items-center">
+              <button type="button" aria-label={t.shell.backToPortfolio} onClick={() => go("portfolio")} className="flex size-tap items-center">
                 <span className="flex size-[34px] items-center justify-center rounded-full bg-surface-control font-mono text-row">←</span>
               </button>
               <span className="num text-label text-ink-2">{usd(portfolio.totalUsd)}</span>
@@ -280,7 +285,7 @@ export default function Home() {
         {shown === "verdict" && (
           <>
             <VerdictView
-              verdict={verdict}
+              verdict={shownVerdict}
               wallets={wallets}
               progress={progress}
               onReview={setReview}

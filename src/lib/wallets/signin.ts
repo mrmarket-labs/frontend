@@ -1,3 +1,4 @@
+import { AppError } from "../i18n";
 import { getWallet } from "./registry";
 import type { Wallet, WalletAddress } from "./types";
 
@@ -46,12 +47,12 @@ export async function signOut(): Promise<void> {
 
 export async function signIn(wallet: Wallet): Promise<SessionInfo> {
   const target = signableAddress(wallet);
-  if (!target) throw new Error("Connect a wallet first.");
+  if (!target) throw new AppError("connectFirst");
   const { nonce, issuedAt } = await api<{ nonce: string; issuedAt: string }>("/api/auth/nonce");
   const message = buildMessage(target.address, nonce, issuedAt);
 
   const installed = getWallet(wallet.provider);
-  const unavailable = () => new Error(`${wallet.label} isn't available in this browser. Reconnect it and retry.`);
+  const unavailable = () => new AppError("unavailable", { name: wallet.label });
   let signature: string;
   if (target.kind === "solana") {
     if (!installed?.solana) throw unavailable();
