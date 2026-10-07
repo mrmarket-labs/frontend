@@ -18,7 +18,7 @@ async function resolveLocale(): Promise<Locale> {
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = dict(await resolveLocale());
-  return { title: t.meta.title, description: t.meta.description, icons: { apple: "/apple-touch-icon.png" }, appleWebApp: { capable: true, title: "Diversify", statusBarStyle: "black" } };
+  return { title: t.meta.title, description: t.meta.description, icons: { apple: "/apple-touch-icon.png" }, appleWebApp: { capable: true, title: "Invest Like Buffett", statusBarStyle: "black" } };
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

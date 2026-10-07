@@ -40,7 +40,7 @@ export async function sendPush(sub: Subscriber, message: PushMessage): Promise<b
 /* --- Email ----------------------------------------------------------------------- */
 
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
-const FROM = process.env.NOTIFY_FROM || "Diversify <onboarding@resend.dev>";
+const FROM = process.env.NOTIFY_FROM || "Invest Like Buffett <onboarding@resend.dev>";
 export const emailConfigured = Boolean(RESEND_KEY);
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -63,7 +63,7 @@ function layout(locale: Locale, heading: string, lines: string[], cta: { label: 
   const t = dict(locale);
   const html = `<!doctype html><html lang="${t.htmlLang}"><body style="margin:0;background:#0b0b0b;color:#f2f2f2;font:16px/1.5 -apple-system,Segoe UI,Helvetica,Arial,sans-serif">
 <div style="max-width:520px;margin:0 auto;padding:32px 24px">
-<div style="font-size:22px;font-family:Georgia,serif">Diversify</div>
+<div style="font-size:22px;font-family:Georgia,serif">Invest Like Buffett</div>
 <h1 style="font-size:20px;font-weight:600;margin:28px 0 12px">${esc(heading)}</h1>
 ${lines.map((l) => `<p style="margin:0 0 10px;color:#d6d6d6">${esc(l)}</p>`).join("")}
 <p style="margin:24px 0"><a href="${cta.url}" style="display:inline-block;background:#c8f171;color:#111;text-decoration:none;font-weight:600;padding:12px 18px;border-radius:10px">${esc(cta.label)}</a></p>

@@ -14,12 +14,12 @@ export const en = {
   dateLocale: "en-GB",
 
   meta: {
-    title: "Diversify",
+    title: "Invest Like Buffett",
     description: "The best crypto strategy is to hold. But are you holding the right assets?",
   },
 
   common: {
-    appName: "Diversify",
+    appName: "Invest Like Buffett",
     portfolio: "Portfolio",
     verdict: "Verdict",
     signals: "Signals",
@@ -35,8 +35,8 @@ export const en = {
   },
 
   legal:
-    "Diversify analyzes public on-chain balances and market data to produce educational allocation ideas. Swaps are routed through Jupiter and 0x and " +
-    "signed in your own wallet; Diversify charges a 0.5% fee on them and never holds your funds. Investor lenses are inspired by publicly known " +
+    "Invest Like Buffett analyzes public on-chain balances and market data to produce educational allocation ideas. Swaps are routed through Jupiter and 0x and " +
+    "signed in your own wallet; Invest Like Buffett charges a 0.5% fee on them and never holds your funds. Investor lenses are inspired by publicly known " +
     "philosophies and are not affiliated with or endorsed by those people. Nothing here is financial advice; crypto and tokenized assets can lose all " +
     "their value.",
 
@@ -188,7 +188,7 @@ export const en = {
   },
 
   analyze: {
-    titleLead: "Diversify like",
+    titleLead: "Invest like",
     titleTail: "…",
     intro: "Pick the mind that judges your book. The lens sets the target; your settings tune it.",
     riskTolerance: "Risk tolerance",
@@ -312,7 +312,7 @@ export const en = {
     minReceived: "Min received",
     priceImpact: "Price impact",
     networkFee: "Network fee",
-    diversifyFee: "Diversify fee",
+    diversifyFee: "Platform fee",
     noFee: "none on this trade",
     youAreBuying: (symbol: string) => `You are buying ${symbol}.`,
     approvalNote: (amount: string, symbol: string) => `Your wallet will first ask to approve exactly ${amount} ${symbol} for the swap contract, then the swap itself.`,
@@ -353,7 +353,7 @@ export const en = {
     pushHint: "Alerts on this device",
     pushOnHint: "On for this device",
     pushUnsupported: "This browser can't receive push alerts.",
-    pushHomeScreen: "On iPhone, add Diversify to your Home Screen first (Share → Add to Home Screen) and switch this on from there.",
+    pushHomeScreen: "On iPhone, add Invest Like Buffett to your Home Screen first (Share → Add to Home Screen) and switch this on from there.",
     pushDenied: "Notifications are blocked for this site in the browser settings.",
     pushNotConfigured: "Push alerts aren't set up on this server yet.",
     emailHint: "An email when something you follow fires",
@@ -436,7 +436,7 @@ export const en = {
   /** What push alerts and emails say; the signal names come from `signals.defs`. */
   notify: {
     pushBody: (now: string) => `Now ${now}. Information, not instruction.`,
-    confirmSubject: "Confirm your Diversify signal alerts",
+    confirmSubject: "Confirm your Invest Like Buffett signal alerts",
     confirmHeading: "Confirm signal alerts",
     confirmBody: "Open the button below and we'll email you when a signal you follow fires. Never price moves, never trades.",
     youPicked: (list: string) => `You picked: ${list}.`,

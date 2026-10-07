@@ -1,9 +1,9 @@
-# Diversify
+# Invest Like Buffett
 
 > The best strategy for crypto is to hold. But are you holding the right assets?
 
 Connect Phantom (Solana, Ethereum and Bitcoin in one go) or any EVM wallet, or just watch addresses.
-Diversify reads your balances, scores current market conditions, and asks Claude to propose a target
+Invest Like Buffett reads your balances, scores current market conditions, and asks Claude to propose a target
 allocation through the lens of an investor philosophy (Munger, Buffett, Dalio, Taleb, Bogle, Cathie Wood).
 It then turns the difference into a rebalance plan of same-chain swaps you sign in your own wallet.
 

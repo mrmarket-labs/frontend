@@ -20,9 +20,9 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 /** Mirrors the server's buildSignInMessage: the server rebuilds the text, so both must agree. */
 function buildMessage(address: string, nonce: string, issuedAt: string): string {
   return [
-    "Diversify wants to verify you own this wallet.",
+    "Invest Like Buffett wants to verify you own this wallet.",
     "",
-    "This is a free signature. It does not send a transaction or give Diversify access to your funds.",
+    "This is a free signature. It does not send a transaction or give Invest Like Buffett access to your funds.",
     "",
     `Address: ${address}`,
     `Nonce: ${nonce}`,

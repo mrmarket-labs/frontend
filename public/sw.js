@@ -1,4 +1,4 @@
-/* Diversify service worker: shows signal alerts and opens the Signals tab when tapped. */
+/* Invest Like Buffett service worker: shows signal alerts and opens the Signals tab when tapped. */
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
@@ -7,9 +7,9 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: "Diversify", body: event.data ? event.data.text() : "" };
+    data = { title: "Invest Like Buffett", body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "Diversify";
+  const title = data.title || "Invest Like Buffett";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",

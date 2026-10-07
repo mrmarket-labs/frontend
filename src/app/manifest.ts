@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next";
 
-/** Lets phones install Diversify to the Home Screen, which is what iOS needs before it allows push. */
+/** Lets phones install Invest Like Buffett to the Home Screen, which is what iOS needs before it allows push. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Diversify",
-    short_name: "Diversify",
+    name: "Invest Like Buffett",
+    short_name: "Invest Like Buffett",
     description: "The best crypto strategy is to hold. But are you holding the right assets?",
     start_url: "/",
     display: "standalone",

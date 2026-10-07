@@ -8,12 +8,12 @@ export const zh: Dict = {
   dateLocale: "zh-CN",
 
   meta: {
-    title: "Diversify",
+    title: "Invest Like Buffett",
     description: "加密资产最好的策略是持有。但你持有的是对的资产吗？",
   },
 
   common: {
-    appName: "Diversify",
+    appName: "Invest Like Buffett",
     portfolio: "持仓",
     verdict: "结论",
     signals: "信号",
@@ -28,8 +28,8 @@ export const zh: Dict = {
   },
 
   legal:
-    "Diversify 读取公开的链上余额和市场数据，生成仅供参考的资产配置思路。兑换通过 Jupiter 和 0x 路由，并在你自己的钱包中签名；" +
-    "Diversify 对兑换收取 0.5% 费用，从不保管你的资金。投资者视角仅受其公开阐述的投资理念启发，与本人无关，也未获其认可。" +
+    "Invest Like Buffett 读取公开的链上余额和市场数据，生成仅供参考的资产配置思路。兑换通过 Jupiter 和 0x 路由，并在你自己的钱包中签名；" +
+    "Invest Like Buffett 对兑换收取 0.5% 费用，从不保管你的资金。投资者视角仅受其公开阐述的投资理念启发，与本人无关，也未获其认可。" +
     "此处内容均不构成投资建议；加密资产和代币化资产可能归零。",
 
   chains: {
@@ -292,7 +292,7 @@ export const zh: Dict = {
     minReceived: "最少收到",
     priceImpact: "价格影响",
     networkFee: "网络费",
-    diversifyFee: "Diversify 手续费",
+    diversifyFee: "平台手续费",
     noFee: "本笔免收",
     youAreBuying: (symbol: string) => `你正在买入 ${symbol}。`,
     approvalNote: (amount: string, symbol: string) => `钱包会先请求你授权恰好 ${amount} ${symbol} 给兑换合约，然后再确认兑换本身。`,
@@ -333,7 +333,7 @@ export const zh: Dict = {
     pushHint: "在此设备上提醒",
     pushOnHint: "此设备已开启",
     pushUnsupported: "此浏览器无法接收推送提醒。",
-    pushHomeScreen: "iPhone 上请先把 Diversify 添加到主屏幕（分享 → 添加到主屏幕），再在那里开启。",
+    pushHomeScreen: "iPhone 上请先把 Invest Like Buffett 添加到主屏幕（分享 → 添加到主屏幕），再在那里开启。",
     pushDenied: "浏览器设置中已屏蔽此网站的通知。",
     pushNotConfigured: "此服务器尚未配置推送提醒。",
     emailHint: "你关注的信号触发时发一封邮件",
@@ -412,7 +412,7 @@ export const zh: Dict = {
   /** 推送与邮件的文案；信号名称来自 `signals.defs`。 */
   notify: {
     pushBody: (now: string) => `当前 ${now}。这是信息，不是指令。`,
-    confirmSubject: "确认你的 Diversify 信号提醒",
+    confirmSubject: "确认你的 Invest Like Buffett 信号提醒",
     confirmHeading: "确认信号提醒",
     confirmBody: "点击下方按钮后，你关注的信号触发时我们会发邮件通知你。不发价格波动，不做交易。",
     youPicked: (list: string) => `你选择了：${list}。`,

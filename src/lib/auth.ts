@@ -45,9 +45,9 @@ export async function verifyToken(token: string): Promise<string | null> {
 /** The exact text the wallet signs. Rebuilt server-side so nothing else can be smuggled in. */
 export function buildSignInMessage(address: string, nonce: string, issuedAt: string): string {
   return [
-    "Diversify wants to verify you own this wallet.",
+    "Invest Like Buffett wants to verify you own this wallet.",
     "",
-    "This is a free signature. It does not send a transaction or give Diversify access to your funds.",
+    "This is a free signature. It does not send a transaction or give Invest Like Buffett access to your funds.",
     "",
     `Address: ${address}`,
     `Nonce: ${nonce}`,
