@@ -62,7 +62,7 @@ export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnaly
             {scanning && <Spinner />}
             Rescan
           </button>
-          <button type="button" onClick={onAnalyze} disabled={holdings.length === 0} className={`${BTN_PRIMARY} h-tap rounded-input px-[22px] text-row`}>
+          <button type="button" onClick={onAnalyze} className={`${BTN_PRIMARY} h-tap rounded-input px-[22px] text-row`}>
             Analyze <span className="font-mono">→</span>
           </button>
         </div>
@@ -204,7 +204,7 @@ export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnaly
       <div className="flex-1 lg:hidden" />
 
       <div className="pt-6 lg:hidden">
-        <button type="button" onClick={onAnalyze} disabled={holdings.length === 0} className={`${BTN_PRIMARY} h-[54px] w-full`}>
+        <button type="button" onClick={onAnalyze} className={`${BTN_PRIMARY} h-[54px] w-full`}>
           Analyze <span className="font-mono">→</span>
         </button>
         <p className="mt-[11px] text-center text-meta text-ink-3">{state}</p>

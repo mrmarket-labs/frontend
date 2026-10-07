@@ -115,7 +115,11 @@ export function AnalyzeView({
             {advising ? `Thinking like ${lens}…` : `Think like ${lens}`}
           </button>
           <p className="mt-2.5 text-center text-meta text-ink-3">
-            {advising ? "Deep analysis takes 30–90 seconds. Keep this tab open." : "Deep analysis takes 30–90 seconds."}
+            {!canAdvise
+              ? "Nothing to analyze yet: your wallets hold no assets we can read. Add a wallet with holdings, or watch an address."
+              : advising
+                ? "Deep analysis takes 30–90 seconds. Keep this tab open."
+                : "Deep analysis takes 30–90 seconds."}
           </p>
           {adviceError && <p role="alert" className="mt-2.5 text-center text-body text-risk">{adviceError}</p>}
           {!advising && (
