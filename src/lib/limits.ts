@@ -82,6 +82,38 @@ export async function cacheDelete(key: string): Promise<void> {
   else memory.delete(key);
 }
 
+/* --- Durable records (no expiry) ------------------------------------------------------- */
+
+const FOREVER = 10 * 365 * 24 * 3600;
+
+export async function recordGet<T>(key: string): Promise<T | null> {
+  return cacheGet<T>(key);
+}
+
+export async function recordSet(key: string, value: unknown): Promise<void> {
+  if (hasDurableStore) await redis("SET", key, JSON.stringify(value));
+  else memory.set(key, { value: JSON.stringify(value), expires: Date.now() + FOREVER * 1000 });
+}
+
+export const recordDelete = cacheDelete;
+
+const memorySets = new Map<string, Set<string>>();
+
+export async function setAdd(key: string, member: string): Promise<void> {
+  if (hasDurableStore) await redis("SADD", key, member);
+  else (memorySets.get(key) ?? memorySets.set(key, new Set()).get(key)!).add(member);
+}
+
+export async function setRemove(key: string, member: string): Promise<void> {
+  if (hasDurableStore) await redis("SREM", key, member);
+  else memorySets.get(key)?.delete(member);
+}
+
+export async function setMembers(key: string): Promise<string[]> {
+  if (hasDurableStore) return redis<string[]>("SMEMBERS", key);
+  return [...(memorySets.get(key) ?? [])];
+}
+
 export function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0].trim() || request.headers.get("x-real-ip") || "unknown";
 }

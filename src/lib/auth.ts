@@ -30,6 +30,18 @@ async function hmac(data: string): Promise<string> {
   return b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data))));
 }
 
+/** Opaque, tamper-evident token carrying `payload` (e.g. an unsubscribe link). */
+export async function signToken(payload: string): Promise<string> {
+  const body = b64url(enc.encode(payload));
+  return `${body}.${await hmac(`token|${body}`)}`;
+}
+
+export async function verifyToken(token: string): Promise<string | null> {
+  const [body, sig] = token.split(".");
+  if (!body || !sig || (await hmac(`token|${body}`)) !== sig) return null;
+  return new TextDecoder().decode(fromB64url(body));
+}
+
 /** The exact text the wallet signs. Rebuilt server-side so nothing else can be smuggled in. */
 export function buildSignInMessage(address: string, nonce: string, issuedAt: string): string {
   return [

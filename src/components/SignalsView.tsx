@@ -2,36 +2,72 @@
 
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n/context";
+import { disablePush, enablePush, fetchChannels, pushState, subscribeEmail, syncPush, unsubscribeEmail, type Channels, type PushState } from "@/lib/notify/client";
 import { SIGNAL_GROUPS, SIGNALS, type SignalDef, type SignalId, type SignalReading, type SignalsResponse, type SignalStatus } from "@/lib/signals";
-import { PageHeader, SectionLabel, Spinner, Toggle, shortDate } from "./ui";
+import { BTN_TONAL, PageHeader, SectionLabel, Spinner, Toggle, shortDate } from "./ui";
 
 const KEY = "diversify:signals";
 const DEFAULT_ON = Object.fromEntries(SIGNALS.map((s) => [s.id, s.defaultOn])) as Record<SignalId, boolean>;
 
-/** Delivery has no backend yet, so both channels are shown switched off and locked. */
-const CHANNELS = ["push", "email"] as const;
+const INPUT = "w-full rounded-input bg-surface-input px-3 text-body outline-none placeholder:text-ink-3 focus-visible:outline-2";
+
+interface Saved {
+  on?: Partial<Record<SignalId, boolean>>;
+  /** The address alerts go to, and whether its confirmation link was opened. */
+  email?: { address: string; confirmed: boolean };
+}
+
+function loadSaved(): Saved {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) ?? "{}") as Saved;
+  } catch {
+    return {};
+  }
+}
+
+function save(patch: Partial<Saved>) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ ...loadSaved(), ...patch }));
+  } catch {}
+}
 
 const DOT: Record<SignalStatus, string> = { fired: "bg-accent", close: "bg-warn", quiet: "bg-rule", unavailable: "bg-rule" };
 const NOW: Record<SignalStatus, string> = { fired: "text-accent", close: "text-warn", quiet: "text-ink-2", unavailable: "text-ink-4" };
-
-function loadOn(): Record<SignalId, boolean> {
-  try {
-    return { ...DEFAULT_ON, ...(JSON.parse(localStorage.getItem(KEY) ?? "{}").on as Partial<Record<SignalId, boolean>>) };
-  } catch {
-    return DEFAULT_ON;
-  }
-}
 
 export function SignalsView() {
   const t = useT();
   const [on, setOn] = useState(DEFAULT_ON);
   const [data, setData] = useState<SignalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [channels, setChannels] = useState<Channels | null>(null);
+  const [push, setPush] = useState<PushState | "loading" | "busy">("loading");
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [email, setEmail] = useState<Saved["email"] | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
 
   useEffect(() => {
     // What the user follows lives on this device and is only knowable in the browser.
+    const saved = loadSaved();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOn(loadOn());
+    setOn({ ...DEFAULT_ON, ...saved.on });
+    // Email links land here with ?email=confirmed|stopped|invalid.
+    const url = new URL(window.location.href);
+    const outcome = url.searchParams.get("email");
+    if (outcome) {
+      if (outcome === "confirmed" && saved.email) save({ email: { ...saved.email, confirmed: true } });
+      if (outcome === "stopped") save({ email: undefined });
+      setBanner(outcome === "confirmed" ? t.signalsView.emailConfirmed : outcome === "stopped" ? t.signalsView.emailStopped : t.signalsView.emailInvalidLink);
+      url.searchParams.delete("email");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+    setEmail(loadSaved().email ?? null);
+    fetchChannels()
+      .then(setChannels)
+      .catch(() => setChannels({ push: null, email: false }));
+    pushState().then(setPush);
     fetch("/api/signals")
       .then(async (r) => {
         const body = await r.json();
@@ -45,10 +81,71 @@ export function SignalsView() {
   function toggle(id: SignalId, value: boolean) {
     const next = { ...on, [id]: value };
     setOn(next);
-    try {
-      localStorage.setItem(KEY, JSON.stringify({ on: next }));
-    } catch {}
+    save({ on: next });
+    if (push === "on") syncPush(next).catch(() => undefined);
+    if (email?.confirmed && channels?.email) subscribeEmail(email.address, next).catch(() => undefined);
   }
+
+  async function setPushOn(value: boolean) {
+    if (!channels?.push) return;
+    setPush("busy");
+    setPushError(null);
+    try {
+      if (value) setPush(await enablePush(channels.push.publicKey, on));
+      else {
+        await disablePush();
+        setPush("off");
+      }
+    } catch (e) {
+      setPushError(e instanceof Error ? e.message : String(e));
+      setPush(await pushState());
+    }
+  }
+
+  async function startEmail() {
+    const address = emailDraft.trim();
+    if (!address) return;
+    setEmailBusy(true);
+    setEmailError(null);
+    try {
+      const { confirmed } = await subscribeEmail(address, on);
+      const next = { address, confirmed };
+      save({ email: next });
+      setEmail(next);
+      setEmailDraft("");
+    } catch (e) {
+      setEmailError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  async function stopEmail() {
+    if (!email) return;
+    setEmailBusy(true);
+    await unsubscribeEmail(email.address);
+    save({ email: undefined });
+    setEmail(null);
+    setEmailBusy(false);
+  }
+
+  /** The one line under the Push toggle that says where this device stands. */
+  const pushHint = (): string => {
+    if (channels && !channels.push) return t.signalsView.pushNotConfigured;
+    switch (push) {
+      case "on":
+        return t.signalsView.pushOnHint;
+      case "home-screen":
+        return t.signalsView.pushHomeScreen;
+      case "denied":
+        return t.signalsView.pushDenied;
+      case "unsupported":
+        return t.signalsView.pushUnsupported;
+      default:
+        return t.signalsView.pushHint;
+    }
+  };
+  const pushLocked = !channels?.push || push === "loading" || push === "busy" || push === "unsupported" || push === "home-screen" || push === "denied";
 
   const loading = !data && !error;
   const readingOf = (id: SignalId): SignalReading | undefined => data?.readings.find((r) => r.id === id);
@@ -147,16 +244,56 @@ export function SignalsView() {
         <div className="flex min-w-0 flex-col gap-6.5 lg:flex-[0_1_300px]">
           <section className="lg:rounded-card-sm lg:bg-surface lg:px-5 lg:py-4.5">
             <SectionLabel>{t.signalsView.howWeReachYou}</SectionLabel>
+            {banner && <p className="mt-2 rounded-input bg-surface-control px-3 py-2 text-meta text-ink-2">{banner}</p>}
             <ul className="mt-2 lg:mt-1.5">
-              {CHANNELS.map((id) => (
-                <li key={id} className="flex items-center gap-3 border-b border-hairline py-2 lg:border-0 lg:py-1">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-body font-medium lg:font-normal">{t.signalsView.channels[id]}</div>
-                    <div className="mt-0.5 text-meta text-ink-3 lg:text-ink-4">{t.signalsView.notLive}</div>
+              <li className="flex items-center gap-3 border-b border-hairline py-2 lg:border-0 lg:py-1">
+                <div className="min-w-0 flex-1">
+                  <div className="text-body font-medium lg:font-normal">{t.signalsView.channels.push}</div>
+                  <div className="mt-0.5 text-meta leading-normal text-ink-3 lg:text-ink-4">{pushHint()}</div>
+                  {pushError && <div className="mt-0.5 text-meta text-risk">{pushError}</div>}
+                </div>
+                {push === "busy" ? <Spinner /> : <Toggle on={push === "on"} onChange={(v) => void setPushOn(v)} label={t.signalsView.channelLabel(t.signalsView.channels.push)} disabled={pushLocked} />}
+              </li>
+              <li className="border-b border-hairline py-2 lg:border-0 lg:py-1">
+                <div className="text-body font-medium lg:font-normal">{t.signalsView.channels.email}</div>
+                {!channels?.email ? (
+                  <div className="mt-0.5 text-meta text-ink-3 lg:text-ink-4">{channels ? t.signalsView.emailNotConfigured : "…"}</div>
+                ) : email ? (
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-meta text-ink-3 lg:text-ink-4">
+                      {email.confirmed ? t.signalsView.emailOn(email.address) : t.signalsView.emailPending(email.address)}
+                    </span>
+                    <button type="button" onClick={() => void stopEmail()} disabled={emailBusy} className={`${BTN_TONAL} h-8 px-3 text-meta`}>
+                      {t.signalsView.emailStop}
+                    </button>
                   </div>
-                  <Toggle on={false} onChange={() => undefined} label={t.signalsView.channelLabel(t.signalsView.channels[id])} disabled />
-                </li>
-              ))}
+                ) : (
+                  <>
+                    <div className="mt-0.5 text-meta text-ink-3 lg:text-ink-4">{t.signalsView.emailHint}</div>
+                    <form
+                      className="mt-2 flex gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void startEmail();
+                      }}
+                    >
+                      <input
+                        type="email"
+                        required
+                        value={emailDraft}
+                        onChange={(e) => setEmailDraft(e.target.value)}
+                        placeholder={t.signalsView.emailPlaceholder}
+                        autoComplete="email"
+                        className={`${INPUT} h-tap`}
+                      />
+                      <button type="submit" disabled={emailBusy} className={`${BTN_TONAL} h-tap flex-none px-4`}>
+                        {emailBusy ? <Spinner /> : t.signalsView.emailSend}
+                      </button>
+                    </form>
+                    {emailError && <p className="mt-1.5 text-meta text-risk">{emailError}</p>}
+                  </>
+                )}
+              </li>
             </ul>
             <p className="mt-3 text-meta leading-normal text-ink-3 lg:mt-2 lg:text-ink-4">{t.signalsView.forNow}</p>
           </section>
