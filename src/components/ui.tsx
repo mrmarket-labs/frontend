@@ -118,6 +118,8 @@ export function Ring({ c, r, width, slices, opacity = 1, picked = null, track = 
 
 export function walletTone(wallet: Pick<Wallet, "provider" | "mode">): { bg: string; ink: string } {
   if (wallet.provider === "phantom") return { bg: "var(--w-phantom)", ink: "var(--w-phantom-ink)" };
+  if (wallet.provider === "okx") return { bg: "var(--w-okx)", ink: "var(--w-okx-ink)" };
+  if (wallet.provider === "binance") return { bg: "var(--w-binance)", ink: "var(--w-binance-ink)" };
   if (wallet.provider?.toLowerCase().includes("metamask")) return { bg: "var(--w-metamask)", ink: "var(--w-metamask-ink)" };
   return { bg: "var(--surface-raised)", ink: wallet.mode === "connected" ? "var(--text)" : "var(--text-2)" };
 }

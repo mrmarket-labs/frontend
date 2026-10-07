@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { Holding } from "@/lib/types";
 import type { AddressKind, Wallet, WalletAddress } from "@/lib/wallets/types";
 import { sameAddress, shortAddress } from "@/lib/wallets/types";
+import { MOBILE_WALLETS, openInWallet } from "@/lib/wallets/mobile";
+import { chainsOf } from "@/lib/wallets/registry";
 import type { WalletsApi } from "@/lib/wallets/useWallets";
 import { BTN_PRIMARY, BTN_TONAL, SectionLabel, Spinner, WalletMark, usd } from "./ui";
 
@@ -123,16 +125,16 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   const walletTotal = (w: Wallet) => w.addresses.reduce((s, a) => s + valueOf(a), 0);
   const total = holdings.reduce((s, h) => s + h.valueUsd, 0);
 
-  async function connect(fn: () => Promise<WalletAddress[] | void>) {
+  async function connect(key: string, name: string) {
     setConnecting(true);
     setConnectError(null);
     setConnectHint(null);
     try {
-      const added = await fn();
+      const added = await api.connect(key);
       // Newer Phantom builds no longer hand out Bitcoin addresses to websites.
-      if (added && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin")) {
-        setConnectHint("Phantom shares Solana and Ethereum with websites but not Bitcoin. Paste your Bitcoin address (Phantom → Bitcoin → Receive) to add it to this wallet.");
-        setManaging({ id: "conn:phantom", adding: true });
+      if (key === "phantom" && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin")) {
+        setConnectHint(`${name} shares Solana and Ethereum with websites but not Bitcoin. Paste your Bitcoin address (${name} → Bitcoin → Receive) to add it to this wallet.`);
+        setManaging({ id: `conn:${key}`, adding: true });
       }
       setPanel(null);
       onWalletsChanged();
@@ -154,7 +156,7 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   }
 
   const connected = api.wallets.filter((w) => w.mode === "connected");
-  const noExtensions = !api.phantomAvailable && api.evmWallets.length === 0;
+  const noExtensions = api.available.length === 0;
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-1 flex-col lg:grid lg:max-w-[1040px] lg:grid-cols-[minmax(0,1fr)_440px] lg:content-center lg:items-center lg:gap-x-gap-col lg:px-gutter-lg lg:py-11">
@@ -254,32 +256,18 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
 
           {panel === "picker" && (
             <div className="mb-2.5 flex flex-col gap-1">
-              {api.phantomAvailable && (
+              {api.available.map((w) => (
                 <button
+                  key={w.key}
                   type="button"
                   disabled={connecting}
-                  onClick={() => connect(api.connectPhantom)}
+                  onClick={() => connect(w.key, w.name)}
                   className="flex min-h-tap items-center gap-[11px] rounded-input bg-surface-input px-3 py-2 text-left disabled:opacity-40"
                 >
-                  <WalletMark wallet={{ provider: "phantom", mode: "connected", label: "Phantom" }} size={30} />
-                  <span>
-                    <span className="block text-row font-medium">Phantom</span>
-                    <span className="block text-meta text-ink-2">Solana · Ethereum · Bitcoin in one connection</span>
-                  </span>
-                </button>
-              )}
-              {api.evmWallets.map((w) => (
-                <button
-                  key={w.rdns}
-                  type="button"
-                  disabled={connecting}
-                  onClick={() => connect(() => api.connectEvm(w.rdns))}
-                  className="flex min-h-tap items-center gap-[11px] rounded-input bg-surface-input px-3 py-2 text-left disabled:opacity-40"
-                >
-                  <WalletMark wallet={{ provider: `eip6963:${w.rdns}`, mode: "connected", label: w.name }} size={30} />
+                  <WalletMark wallet={{ provider: w.key, mode: "connected", label: w.name }} size={30} />
                   <span>
                     <span className="block text-row font-medium">{w.name}</span>
-                    <span className="block text-meta text-ink-2">Ethereum, L2s and Hyperliquid</span>
+                    <span className="block text-meta text-ink-2">{chainsOf(w)}</span>
                   </span>
                 </button>
               ))}
@@ -288,27 +276,30 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
                   <p className="text-meta leading-normal text-ink-2">
                     A phone browser cannot reach your wallet app from here. Open this page inside the wallet instead, then connect there.
                   </p>
-                  {(["phantom", "metamask"] as const).map((id) => {
-                    const label = id === "phantom" ? "Phantom" : "MetaMask";
-                    return (
-                      <a key={id} href={api.mobileLinks![id]} className="flex min-h-tap items-center gap-[11px] rounded-input bg-surface-input px-3 py-2">
-                        <WalletMark wallet={{ provider: id, mode: "connected", label }} size={30} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-row font-medium">Open in {label}</span>
-                          <span className="block text-meta text-ink-2">
-                            {id === "phantom" ? "Solana · Ethereum · Bitcoin in one connection" : "Ethereum, L2s and Hyperliquid"}
-                          </span>
-                        </span>
-                        <span className="font-mono text-body text-ink-2">↗</span>
-                      </a>
-                    );
-                  })}
+                  {MOBILE_WALLETS.map(({ id, label, chains }) => (
+                    <a
+                      key={id}
+                      href={api.mobileLinks![id].web}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openInWallet(api.mobileLinks![id]);
+                      }}
+                      className="flex min-h-tap items-center gap-[11px] rounded-input bg-surface-input px-3 py-2"
+                    >
+                      <WalletMark wallet={{ provider: id, mode: "connected", label }} size={30} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-row font-medium">Open in {label}</span>
+                        <span className="block text-meta text-ink-2">{chains}</span>
+                      </span>
+                      <span className="font-mono text-body text-ink-2">↗</span>
+                    </a>
+                  ))}
                   <p className="text-meta leading-normal text-ink-3">No wallet app? Watch an address instead; it reads balances without connecting.</p>
                 </>
               )}
               {noExtensions && !api.mobileLinks && (
                 <p className="text-meta leading-normal text-ink-2">
-                  No wallet extension found in this browser. Install Phantom or MetaMask, or watch an address instead.
+                  No wallet extension found in this browser. Install Phantom, OKX Wallet, Binance Wallet or MetaMask, or watch an address instead.
                 </p>
               )}
               {connecting && (
@@ -345,7 +336,10 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
           )}
 
           <div className="flex gap-[9px]">
-            <button type="button" aria-expanded={panel === "picker"} onClick={() => setPanel(panel === "picker" ? null : "picker")} className={`${BTN_TONAL} h-tap flex-1 rounded-input`}>
+            <button type="button" aria-expanded={panel === "picker"} onClick={() => {
+                if (panel !== "picker") api.refresh();
+                setPanel(panel === "picker" ? null : "picker");
+              }} className={`${BTN_TONAL} h-tap flex-1 rounded-input`}>
               + Wallet
             </button>
             <button type="button" aria-expanded={panel === "watch"} onClick={() => setPanel(panel === "watch" ? null : "watch")} className={`${BTN_TONAL} h-tap flex-1 rounded-input`}>

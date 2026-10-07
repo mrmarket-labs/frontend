@@ -47,6 +47,10 @@
   --w-metamask-ink: #1a1203;
   --w-phantom: #9a8cf0;
   --w-phantom-ink: #130b2e;
+  --w-okx: #000000;
+  --w-okx-ink: #ffffff;
+  --w-binance: #f0b90b;
+  --w-binance-ink: #1a1403;
 
   /* Layout: mobile */
   --gutter: 24px;

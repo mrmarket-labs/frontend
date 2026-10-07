@@ -1,20 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getEvmWallet, getEvmWallets, subscribeEvmWallets, type EvmWalletInfo } from "./eip6963";
 import { isMobileBrowser, walletBrowserLinks, type WalletBrowserLinks } from "./mobile";
-import { connectPhantom, hasPhantom } from "./phantom";
+import { connectWallet, getWallet, getWallets, subscribeWallets, type DiscoveredWallet } from "./registry";
 import { loadWallets, saveWallets, watchedWallet } from "./store";
 import { detectKind, normalizeAddress, sameAddress, type Wallet, type WalletAddress } from "./types";
 
 /** Attach addresses to a connected wallet, absorbing any watched entries for the same addresses. */
 function mergeConnected(wallets: Wallet[], provider: string, label: string, addresses: WalletAddress[]): Wallet[] {
   const isNew = (a: WalletAddress) => !addresses.some((b) => sameAddress(a.address, b.address));
+  // Wallets saved before the registry carry "eip6963:<rdns>" ids; they are the same wallet.
+  const same = (w: Wallet) => w.provider === provider || (w.mode === "connected" && getWallet(w.provider)?.key === provider);
   const rest = wallets
-    .filter((w) => w.provider !== provider)
+    .filter((w) => !same(w))
     .map((w) => (w.mode === "watched" ? { ...w, addresses: w.addresses.filter(isNew) } : w))
     .filter((w) => w.addresses.length > 0);
-  const existing = wallets.find((w) => w.provider === provider);
+  const existing = wallets.find(same);
   const merged: Wallet = {
     id: existing?.id ?? `conn:${provider}`,
     mode: "connected",
@@ -28,8 +29,7 @@ function mergeConnected(wallets: Wallet[], provider: string, label: string, addr
 export function useWallets() {
   const [wallets, setWalletsState] = useState<Wallet[]>([]);
   const [ready, setReady] = useState(false);
-  const [evmWallets, setEvmWallets] = useState<EvmWalletInfo[]>([]);
-  const [phantomAvailable, setPhantomAvailable] = useState(false);
+  const [available, setAvailable] = useState<DiscoveredWallet[]>([]);
   const [mobileLinks, setMobileLinks] = useState<WalletBrowserLinks | null>(null);
 
   const setWallets = useCallback((next: Wallet[] | ((prev: Wallet[]) => Wallet[])) => {
@@ -45,16 +45,9 @@ export function useWallets() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setWalletsState(loadWallets());
     setReady(true);
-    setPhantomAvailable(hasPhantom());
-    setEvmWallets(getEvmWallets());
+    setAvailable(getWallets());
     if (isMobileBrowser()) setMobileLinks(walletBrowserLinks());
-    const unsubscribe = subscribeEvmWallets(() => setEvmWallets(getEvmWallets()));
-    // Extensions inject late sometimes; look again after a beat.
-    const timer = setTimeout(() => setPhantomAvailable(hasPhantom()), 800);
-    return () => {
-      unsubscribe();
-      clearTimeout(timer);
-    };
+    return subscribeWallets(() => setAvailable(getWallets()));
   }, []);
 
   const addWatched = useCallback(
@@ -78,19 +71,16 @@ export function useWallets() {
     [setWallets],
   );
 
-  const connectPhantomWallet = useCallback(async (): Promise<WalletAddress[]> => {
-    const addresses = await connectPhantom();
-    setWallets((prev) => mergeConnected(prev, "phantom", "Phantom", addresses));
-    return addresses;
-  }, [setWallets]);
+  /** Re-read the injected providers; wallet in-app browsers sometimes inject after we mount. */
+  const refresh = useCallback(() => setAvailable(getWallets()), []);
 
-  const connectEvmWallet = useCallback(
-    async (rdns: string) => {
-      const info = getEvmWallet(rdns);
+  const connect = useCallback(
+    async (key: string): Promise<WalletAddress[]> => {
+      const info = getWallet(key);
       if (!info) throw new Error("Wallet not found.");
-      const accounts = (await info.provider.request({ method: "eth_requestAccounts" })) as string[];
-      const addresses: WalletAddress[] = accounts.map((a) => ({ kind: "evm", address: a.toLowerCase() }));
-      setWallets((prev) => mergeConnected(prev, `eip6963:${rdns}`, info.name, addresses));
+      const addresses = await connectWallet(info);
+      setWallets((prev) => mergeConnected(prev, info.key, info.name, addresses));
+      return addresses;
     },
     [setWallets],
   );
@@ -158,14 +148,14 @@ export function useWallets() {
   return {
     wallets,
     ready,
-    phantomAvailable,
-    evmWallets,
+    /** Wallets installed in this browser, every chain each one speaks already folded together. */
+    available,
+    refresh,
     /** Set on phones and tablets: links that reopen the page inside a wallet app's browser. */
     mobileLinks,
     allAddresses: wallets.flatMap((w) => w.addresses.map((a) => a.address)),
     addWatched,
-    connectPhantom: connectPhantomWallet,
-    connectEvm: connectEvmWallet,
+    connect,
     rename,
     remove,
     addAddressesTo,

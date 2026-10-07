@@ -1,7 +1,6 @@
 import type { SwapStep } from "../plan";
 import { EVM_CHAIN_IDS, EVM_CHAIN_PARAMS, NATIVE, ZEROX_NATIVE, fromRawUnits, toRawUnits, type EvmExecChain } from "../tokens";
-import { getEvmWallet } from "./eip6963";
-import { phantomEvmProvider, phantomSignSolana } from "./phantom";
+import { getWallet } from "./registry";
 import type { Eip1193Provider, Wallet } from "./types";
 
 export interface SolanaQuote {
@@ -127,10 +126,13 @@ async function sendAndConfirmSolana(signedTransaction: string, lastValidBlockHei
 }
 
 function evmProviderFor(wallet: Wallet): Eip1193Provider {
-  const p = wallet.provider === "phantom" ? phantomEvmProvider() : getEvmWallet(wallet.provider?.replace("eip6963:", "") ?? "")?.provider;
+  const p = getWallet(wallet.provider)?.evm?.provider;
   if (!p) throw new Error(`${wallet.label} isn't available in this browser. Reconnect it and retry.`);
   return p;
 }
+
+const fromBase64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 async function ensureEvmAccount(provider: Eip1193Provider, address: string): Promise<void> {
   const has = (accounts: string[]) => accounts.some((a) => a.toLowerCase() === address.toLowerCase());
@@ -176,13 +178,15 @@ export async function executeStep(
   onSent: (txId: string) => void = () => undefined,
 ): Promise<string> {
   if (quote.kind === "solana") {
-    if (wallet.provider !== "phantom") throw new Error("Only Phantom can sign Solana swaps right now.");
-    // Blockhashes live ~60s, so build the transaction right before Phantom opens.
+    const solana = getWallet(wallet.provider)?.solana;
+    if (!solana) throw new Error(`${wallet.label} isn't available in this browser. Reconnect it and retry.`);
+    // Blockhashes live ~60s, so build the transaction right before the wallet opens.
     const fresh = (await fetchQuote(step)) as SolanaQuote;
     if (BigInt(fresh.minOutAmount) < (BigInt(quote.minOutAmount) * BigInt(99)) / BigInt(100))
       throw new Error("The price moved more than 1% since this quote. Review the new quote and try again.");
     onPhase("signing");
-    const signed = await phantomSignSolana(fresh.swapTransaction, step.address);
+    // Sign only; the app broadcasts and rebroadcasts the bytes itself so the swap can't be dropped silently.
+    const signed = toBase64(await solana.signTransaction(fromBase64(fresh.swapTransaction), step.address));
     onPhase("confirming");
     return sendAndConfirmSolana(signed, fresh.lastValidBlockHeight, onSent);
   }
