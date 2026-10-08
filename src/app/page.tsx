@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyzeView } from "@/components/AnalyzeView";
 import { AppShell, type Tab } from "@/components/AppShell";
 import { ConnectView } from "@/components/ConnectView";
+import { OutsideView } from "@/components/OutsideView";
 import { PortfolioView } from "@/components/PortfolioView";
 import { ReviewSheet } from "@/components/ReviewSheet";
 import { SignalsView } from "@/components/SignalsView";
@@ -13,6 +14,7 @@ import type { Advice } from "@/lib/advisor";
 import { errorMessage } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n/context";
 import type { Horizon, RiskLevel } from "@/lib/options";
+import { loadOutside, outsideTotal, priceOutside, saveOutside, type OutsideHolding, type Rates } from "@/lib/outside";
 import { PERSONAS } from "@/lib/personas";
 import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
 import type { Trade } from "@/lib/rebalance";
@@ -22,8 +24,8 @@ import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progres
 import { getSession, signIn, signOut, signableAddress, type SessionInfo } from "@/lib/wallets/signin";
 import { useWallets } from "@/lib/wallets/useWallets";
 
-/** connect ──▶ portfolio ──▶ analyze ──▶ verdict; portfolio, verdict and signals are the tabs. */
-type View = "connect" | "analyze" | Tab;
+/** connect ──▶ portfolio ──▶ outside ──▶ analyze ──▶ verdict; portfolio, verdict and signals are the tabs. */
+type View = "connect" | "outside" | "analyze" | Tab;
 
 /** A failed API call: the server's message in the user's language, plus a code where it sends one. */
 class ApiError extends Error {
@@ -60,6 +62,11 @@ export default function Home() {
   const [adviceError, setAdviceError] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
 
+  // Money the app cannot see: stated by hand, priced with rates the server fetches.
+  const [outside, setOutside] = useState<OutsideHolding[]>([]);
+  const [fx, setFx] = useState<Rates | null>(null);
+  const [fxError, setFxError] = useState(false);
+
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
@@ -76,10 +83,26 @@ export default function Home() {
     window.scrollTo(0, 0);
   }, []);
 
+  const loadFx = useCallback(async (): Promise<Rates | null> => {
+    setFxError(false);
+    try {
+      const res = await fetch("/api/fx");
+      const data = (await res.json()) as { rates?: Rates };
+      if (!res.ok || !data.rates) throw new Error("fx");
+      setFx(data.rates);
+      return data.rates;
+    } catch {
+      setFxError(true);
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     // Saved state is only knowable in the browser; the last verdict stays on file between visits.
     /* eslint-disable react-hooks/set-state-in-effect */
     setProgress(loadProgress());
+    setOutside(loadOutside());
+    void loadFx();
     const saved = loadVerdict();
     if (saved) {
       setVerdict(saved);
@@ -92,7 +115,12 @@ export default function Home() {
     const onPop = (e: PopStateEvent) => setView((e.state as { view?: View } | null)?.view ?? "connect");
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [loadFx]);
+
+  function changeOutside(items: OutsideHolding[]) {
+    setOutside(items);
+    saveOutside(items);
+  }
 
   const addresses = wallets.allAddresses;
 
@@ -159,15 +187,20 @@ export default function Home() {
     setAdvising(true);
     setAdviceError(null);
     try {
+      // Outside amounts are stated in euros or coins; fix them in dollars now, with fresh rates if needed.
+      const rates = outside.length > 0 ? (fx ?? (await loadFx())) : {};
+      const priced = priceOutside(outside, rates ?? {});
+      if (priced.length < outside.length) throw new Error(t.outside.ratesFailed);
       const data = await postJson<{ advice: Advice; trades: Trade[] }>(
         "/api/advise",
-        { holdings: portfolio.holdings, positions: portfolio.positions, personaId, risk, horizon, allowPerps },
+        { holdings: portfolio.holdings, positions: portfolio.positions, outside: priced, personaId, risk, horizon, allowPerps },
         t.common.requestFailed,
       );
       const next: Verdict = {
         advice: data.advice,
         trades: data.trades,
         holdings: portfolio.holdings,
+        outside: priced,
         steps: compilePlan(portfolio.holdings, data.trades, t),
         personaId,
         risk,
@@ -203,6 +236,8 @@ export default function Home() {
   const reviewWallet = review ? wallets.walletFor(review.address) : undefined;
   // Every screen past connect is about a scanned portfolio.
   const shown: View = portfolio ? view : "connect";
+  const outsidePriced = priceOutside(outside, fx ?? {});
+  const outsideUsd = outsidePriced.length === outside.length ? outsideTotal(outsidePriced) : null;
 
   if (shown === "connect" || !portfolio)
     return (
@@ -219,7 +254,8 @@ export default function Home() {
       />
     );
 
-  const tab: Tab = shown === "analyze" ? "portfolio" : shown;
+  const isStep = shown === "analyze" || shown === "outside";
+  const tab: Tab = isStep ? "portfolio" : shown;
 
   return (
     <>
@@ -230,7 +266,7 @@ export default function Home() {
         holdings={portfolio.holdings}
         onTab={go}
         onWallets={() => go("connect")}
-        hideTabs={shown === "analyze"}
+        hideTabs={isStep}
         mobileAction={
           shown === "portfolio" ? (
             <button type="button" aria-label={t.shell.rescan} disabled={scanning} onClick={() => void scan()} className="flex size-tap items-center justify-center disabled:opacity-40">
@@ -239,7 +275,7 @@ export default function Home() {
           ) : undefined
         }
         mobileBar={
-          shown === "analyze" ? (
+          isStep ? (
             <div className="flex items-center justify-between">
               <button type="button" aria-label={t.shell.backToPortfolio} onClick={() => go("portfolio")} className="flex size-tap items-center">
                 <span className="flex size-[34px] items-center justify-center rounded-full bg-surface-control font-mono text-row">←</span>
@@ -256,7 +292,20 @@ export default function Home() {
             lastRead={verdict ? { at: verdict.at, personaId: verdict.personaId } : null}
             scanning={scanning}
             onRescan={() => void scan()}
-            onAnalyze={() => go("analyze")}
+            onAnalyze={() => go("outside")}
+            outside={outsidePriced}
+            onOutside={() => go("outside")}
+          />
+        )}
+        {shown === "outside" && (
+          <OutsideView
+            items={outside}
+            onChange={changeOutside}
+            rates={fx}
+            ratesError={fxError}
+            onRetryRates={() => void loadFx()}
+            onChainUsd={portfolio.totalUsd}
+            onContinue={() => go("analyze")}
           />
         )}
         {shown === "analyze" && (
@@ -276,6 +325,8 @@ export default function Home() {
             onVerify={verify}
             onSignOut={() => signOut().then(() => setSession(null))}
             onWallets={() => go("connect")}
+            outside={outside.length > 0 ? { usd: outsideUsd, count: outside.length } : null}
+            onOutside={() => go("outside")}
             canAdvise={portfolio.holdings.length > 0}
             advising={advising}
             adviceError={adviceError}

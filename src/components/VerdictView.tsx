@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import type { Advice } from "@/lib/advisor";
-import { useLocale } from "@/lib/i18n/context";
+import { useLocale, useT } from "@/lib/i18n/context";
+import { OUTSIDE_CATEGORY, type OutsideKind, type OutsidePriced } from "@/lib/outside";
 import { getPersona } from "@/lib/personas";
 import type { Step, SwapStep } from "@/lib/plan";
 import type { Verdict } from "@/lib/verdict";
 import type { Progress } from "@/lib/wallets/progress";
 import type { WalletsApi } from "@/lib/wallets/useWallets";
 import { PlanView } from "./PlanView";
-import { BTN_PRIMARY, BTN_QUIET, PageHeader, Ring, SectionLabel, chartColor, pct, shortDate, sliceBy } from "./ui";
+import { BTN_PRIMARY, BTN_QUIET, PageHeader, Ring, SectionLabel, chartColor, pct, shortDate, sliceBy, usd } from "./ui";
 
 type Allocation = Advice["allocations"][number];
 
@@ -38,6 +39,50 @@ function targetsOf(verdict: Verdict, via: (instrument: string, venue: string) =>
     else byAsset.set(key, { asset: a.asset, category: a.category, role: a.role, targetPct: a.targetPct, via: [route], rationale: [a.rationale], delta: 0 });
   }
   return [...byAsset.values()].map((t) => ({ ...t, delta: t.targetPct - today(t.asset) })).sort((a, b) => b.targetPct - a.targetPct);
+}
+
+/**
+ * On-chain money next to everything stated outside the app, one bar and one row each. Kinds borrow
+ * the chart colour of the on-chain class they stand in for; the rest sit in a neutral tone.
+ */
+function WholePicture({ onChainUsd, outside, note }: { onChainUsd: number; outside: OutsidePriced[]; note: string | null | undefined }) {
+  const t = useT();
+  const byKind = new Map<OutsideKind, number>();
+  for (const h of outside) byKind.set(h.kind, (byKind.get(h.kind) ?? 0) + h.valueUsd);
+  const whole = onChainUsd + outside.reduce((s, h) => s + h.valueUsd, 0) || 1;
+  const rows = [
+    { key: "wallets", label: t.verdict.inWallets, usd: onChainUsd, color: "var(--text)" },
+    ...[...byKind.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([kind, value]) => {
+        const category = OUTSIDE_CATEGORY[kind];
+        return { key: kind, label: t.outside.kinds[kind], usd: value, color: category ? chartColor(category) : "var(--text-4)" };
+      }),
+  ].filter((r) => r.usd > 0);
+  const share = (n: number) => (n / whole) * 100;
+
+  return (
+    <div className="mt-5 rounded-card-sm bg-surface p-4 lg:mt-6">
+      <SectionLabel>{t.verdict.wholePicture}</SectionLabel>
+      <p className="mt-1.5 text-body leading-normal text-ink-2">{t.verdict.onChainShare(usd(onChainUsd), pct(share(onChainUsd), 0))}</p>
+      <div role="img" aria-label={t.verdict.wholeBarLabel(rows.map((r) => `${r.label} ${pct(share(r.usd), 0)}`).join(", "))} className="mt-3 flex h-2 gap-px overflow-hidden rounded-pill bg-surface-track">
+        {rows.map((r) => (
+          <span key={r.key} style={{ width: `${share(r.usd)}%`, background: r.color }} className="block h-full" />
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-col gap-[7px]">
+        {rows.map((r) => (
+          <li key={r.key} className="flex items-center gap-[9px]">
+            <span className="size-[7px] flex-none rounded-full" style={{ background: r.color }} />
+            <span className="min-w-0 flex-1 truncate text-label text-ink-2">{r.label}</span>
+            <span className="num text-meta text-ink-3">{pct(share(r.usd), 0)}</span>
+            <span className="num min-w-[72px] text-right text-body">{usd(r.usd)}</span>
+          </li>
+        ))}
+      </ul>
+      {note && <p className="mt-3 text-body leading-relaxed text-ink-2">{note}</p>}
+    </div>
+  );
 }
 
 function Delta({ points, hold, pts }: { points: number; hold: string; pts: (signed: string) => string }) {
@@ -130,6 +175,10 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
             <span className="num text-body">{advice.targetRiskScore}/10</span>
             <span className="text-label text-ink-3">{t.verdict.ifYouFollow}</span>
           </div>
+
+          {verdict.outside && verdict.outside.length > 0 && (
+            <WholePicture onChainUsd={holdings.reduce((s, h) => s + h.valueUsd, 0)} outside={verdict.outside} note={advice.wholePicture} />
+          )}
 
           <div className="mt-5 rounded-card bg-surface px-4 py-[18px] lg:mt-8 lg:flex lg:flex-wrap lg:items-center lg:gap-9 lg:rounded-none lg:bg-transparent lg:p-0">
             <div className="flex items-baseline justify-between lg:hidden">

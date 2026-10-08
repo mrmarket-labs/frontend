@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { CATEGORY_LABELS } from "./classify";
 import type { Locale } from "./i18n";
 import { VENUES, type Horizon, type RiskLevel } from "./options";
+import { formatAmount, type OutsideKind, type OutsidePriced } from "./outside";
 import type { Persona } from "./personas";
 import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
 import type { HyperliquidVenues } from "./venues";
@@ -53,8 +54,14 @@ export const AdviceSchema = z.object({
   diagnosis: z.string().describe("2-4 sentences on what is wrong or right with the current portfolio: concentration, risk, idle assets."),
   marketView: z.string().describe("2-3 sentences on current crypto market conditions and how they shape this allocation."),
   personaTake: z.string().describe("2-3 sentences in the spirit of the persona's philosophy explaining the approach. Do not fabricate quotes."),
-  currentRiskScore: z.number().int().describe("1 (very safe) to 10 (extremely risky)"),
-  targetRiskScore: z.number().int().describe("1 (very safe) to 10 (extremely risky)"),
+  wholePicture: z
+    .string()
+    .nullable()
+    .describe(
+      "Only when holdings outside the app were reported: 2-3 sentences on how they shaped the on-chain targets (what the outside money already covers, what the on-chain sleeve should therefore do). Null when none were reported.",
+    ),
+  currentRiskScore: z.number().int().describe("1 (very safe) to 10 (extremely risky); rates the whole portfolio when outside holdings were reported"),
+  targetRiskScore: z.number().int().describe("1 (very safe) to 10 (extremely risky); rates the whole portfolio when outside holdings were reported"),
   allocations: z
     .array(
       z.object({
@@ -76,6 +83,8 @@ export type Advice = z.infer<typeof AdviceSchema>;
 export interface AdviceRequest {
   holdings: Holding[];
   positions: PerpPosition[];
+  /** Money the app cannot move, priced in dollars at the time of the read. */
+  outside: OutsidePriced[];
   persona: Persona;
   risk: RiskLevel;
   horizon: Horizon;
@@ -115,6 +124,39 @@ function describePositions(positions: PerpPosition[], holdings: Holding[]): stri
   return `Total notional $${notional.toFixed(0)} (${(notional / total).toFixed(2)}x the portfolio's net value)\n${lines.join("\n")}`;
 }
 
+const OUTSIDE_LABELS: Record<OutsideKind, string> = {
+  cash: "Cash (fiat; the same job stablecoins do)",
+  stocks: "Stocks / index funds",
+  bonds: "Bonds",
+  gold: "Gold",
+  realEstate: "Real estate",
+  bitcoin: "Bitcoin (BTC)",
+  ethereum: "Ethereum (ETH)",
+  otherCrypto: "Other crypto",
+  other: "Other",
+};
+
+/** One line per kind, notes folded in, so the model sees the whole balance sheet in a glance. */
+function describeOutside(outside: OutsidePriced[], holdings: Holding[]): string {
+  if (outside.length === 0) return "None reported. The on-chain holdings above are the whole portfolio as far as we know.";
+  const onChain = holdings.reduce((s, h) => s + h.valueUsd, 0);
+  const total = outside.reduce((s, h) => s + h.valueUsd, 0);
+  const whole = onChain + total || 1;
+  const byKind = new Map<OutsideKind, OutsidePriced[]>();
+  for (const h of outside) byKind.set(h.kind, [...(byKind.get(h.kind) ?? []), h]);
+  const lines = [...byKind.entries()]
+    .map(([kind, items]) => ({ kind, items, value: items.reduce((s, h) => s + h.valueUsd, 0) }))
+    .sort((a, b) => b.value - a.value)
+    .map(({ kind, items, value }) => {
+      const stated = items.map((h) => `${formatAmount(h.amount, h.unit)}${h.note ? ` (${h.note})` : ""}`).join(", ");
+      return `- ${OUTSIDE_LABELS[kind]}: $${value.toFixed(0)} (${((value / whole) * 100).toFixed(1)}% of everything) — stated as ${stated}`;
+    });
+  return [
+    `Outside total: $${total.toFixed(0)}. Whole portfolio (on-chain + outside): $${whole.toFixed(0)}, of which on-chain $${onChain.toFixed(0)} (${((onChain / whole) * 100).toFixed(1)}%).`,
+    ...lines,
+  ].join("\n");
+}
+
 function describeMarket(m: MarketSnapshot): string {
   const fmt = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
   return [
@@ -144,11 +186,12 @@ Rules:
 - Prefer fewer, larger positions over many tiny ones. Minimize unnecessary trades, since every swap costs fees and active trading rarely beats holding.
 - Percentages must sum to exactly 100.
 - Leveraged perp positions are exposure on top of the holdings (their margin is already inside the holdings). Account for them in the diagnosis, risk scores and risks, and say plainly whether the persona would keep, reduce or close them. Allocations cover holdings only; never allocate to perps.
+- Holdings outside the app (bank cash, brokerage, gold, coins on an exchange or in cold storage) cannot be moved here, but they are part of the user's wealth. When any are reported, judge the WHOLE portfolio and choose the on-chain targets so the whole balances: cash outside already does the stablecoin job, so do not pile stablecoins on-chain on top of a large cash position (keep only what the on-chain plan needs as dry powder); BTC or ETH held outside already is bitcoin or ether exposure, so size the on-chain BTC/ETH accordingly; stocks or index funds outside already are equity exposure, so tokenized stocks on-chain add little; gold outside already is the gold hedge. Conversely, if the user holds nothing defensive outside, the on-chain sleeve carries that job. Say this reasoning plainly in wholePicture, and let the diagnosis and risk scores describe the whole portfolio. The allocations still describe the on-chain portfolio only and still sum to 100 of it, because that is the only part that can be traded here.
 - Be direct and specific. This is educational analysis, not personalized financial advice.`;
 
 const LANGUAGE_RULE: Record<Locale, string> = {
   en: "Write every free-text field in English.",
-  zh: "Write every free-text field (verdict, diagnosis, marketView, personaTake, rationale, risks, executionTips) in Simplified Chinese. Keep tickers, venue ids and instrument names exactly as given in the universe.",
+  zh: "Write every free-text field (verdict, diagnosis, marketView, personaTake, wholePicture, rationale, risks, executionTips) in Simplified Chinese. Keep tickers, venue ids and instrument names exactly as given in the universe.",
 };
 
 /** Error texts the route maps to the user's language. */
@@ -172,6 +215,9 @@ ${describePortfolio(req.holdings)}
 
 Open leveraged perp positions:
 ${describePositions(req.positions, req.holdings)}
+
+Held outside the app (cannot be traded here; count it toward the whole picture):
+${describeOutside(req.outside, req.holdings)}
 
 Market conditions:
 ${describeMarket(req.market)}

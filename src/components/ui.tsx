@@ -44,8 +44,13 @@ const CHART_KEY: Record<Category, ChartKey> = {
 export const chartKey = (category: Category): ChartKey => CHART_KEY[category];
 export const chartColor = (category: Category): string => CHART[CHART_KEY[category]].color;
 
+/** Money the app cannot move is drawn in neutral tones (two, so neighbours stay apart), so colour always means "in your wallets". */
+export const OUTSIDE_COLORS = ["var(--text-4)", "var(--rule)"] as const;
+export const OUTSIDE_COLOR = OUTSIDE_COLORS[0];
+
 export interface Slice {
-  key: ChartKey;
+  /** A chart class, or `outside:<kind>` for money held elsewhere. */
+  key: string;
   label: string;
   chip: string;
   color: string;
@@ -86,7 +91,7 @@ export function Ring({ c, r, width, slices, opacity = 1, picked = null, track = 
   width: number;
   slices: Slice[];
   opacity?: number;
-  picked?: ChartKey | null;
+  picked?: string | null;
   track?: string;
 }) {
   const len = 2 * Math.PI * r;

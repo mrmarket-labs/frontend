@@ -8,6 +8,7 @@ import { HORIZONS, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
 import { readSession } from "@/lib/auth";
 import { cacheGet, cacheSet, clientIp, hit, today, tooMany } from "@/lib/limits";
+import { MAX_NOTE_LENGTH, MAX_OUTSIDE, OUTSIDE_KINDS, UNITS, type OutsidePriced } from "@/lib/outside";
 import { getHyperliquidVenues } from "@/lib/venues";
 import { computeTrades } from "@/lib/rebalance";
 import type { Category } from "@/lib/types";
@@ -21,7 +22,12 @@ const ADVICE_DAILY_CAP = Number(process.env.ADVICE_DAILY_CAP || 300);
 const CACHE_TTL_SEC = 3600;
 
 /** Same portfolio shape + same question + same market regime → same answer; don't pay twice. */
-async function adviceCacheKey(holdings: { asset: string; valueUsd: number }[], params: Record<string, unknown>, regime: string): Promise<string> {
+async function adviceCacheKey(
+  holdings: { asset: string; valueUsd: number }[],
+  outside: OutsidePriced[],
+  params: Record<string, unknown>,
+  regime: string,
+): Promise<string> {
   const total = holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
   const byAsset = new Map<string, number>();
   for (const h of holdings) byAsset.set(h.asset.toUpperCase(), (byAsset.get(h.asset.toUpperCase()) ?? 0) + h.valueUsd);
@@ -29,7 +35,11 @@ async function adviceCacheKey(holdings: { asset: string; valueUsd: number }[], p
     .map(([a, v]) => [a, Math.round((v / total) * 100)] as const)
     .filter(([, pct]) => pct > 0)
     .sort();
-  const fingerprint = JSON.stringify({ shape, size: Math.round(Math.log10(total) * 2), ...params, regime });
+  // Outside money is keyed by its weight against the on-chain total, per kind, in coarse steps.
+  const byKind = new Map<string, number>();
+  for (const h of outside) byKind.set(h.kind, (byKind.get(h.kind) ?? 0) + h.valueUsd);
+  const outsideShape = [...byKind.entries()].map(([k, v]) => [k, Math.round((v / total) * 10)] as const).sort();
+  const fingerprint = JSON.stringify({ shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
   return `advcache:${Buffer.from(digest).toString("hex").slice(0, 32)}`;
 }
@@ -70,6 +80,23 @@ const RequestSchema = z.object({
     )
     .max(200)
     .default([]),
+  outside: z
+    .array(
+      z.object({
+        id: z.string().max(40),
+        kind: z.enum(OUTSIDE_KINDS),
+        amount: z.number().positive().finite(),
+        unit: z.enum(UNITS),
+        valueUsd: z.number().nonnegative().finite(),
+        note: z
+          .string()
+          .max(MAX_NOTE_LENGTH)
+          .transform((s) => s.replace(/\s+/g, " ").trim())
+          .optional(),
+      }),
+    )
+    .max(MAX_OUTSIDE)
+    .default([]),
 });
 
 export async function POST(request: Request) {
@@ -80,7 +107,7 @@ export async function POST(request: Request) {
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: t.invalidRequest }, { status: 400 });
-  const { personaId, risk, horizon, allowPerps, holdings, positions } = parsed.data;
+  const { personaId, risk, horizon, allowPerps, holdings, positions, outside } = parsed.data;
   const persona = getPersona(personaId);
   if (!persona) return Response.json({ error: t.unknownPersona }, { status: 400 });
 
@@ -89,7 +116,7 @@ export async function POST(request: Request) {
 
   try {
     const [market, venues] = await Promise.all([getMarketSnapshot(), getHyperliquidVenues()]);
-    const cacheKey = await adviceCacheKey(holdings, { personaId, risk, horizon, allowPerps, locale }, market.regime);
+    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, horizon, allowPerps, locale }, market.regime);
     const cached = await cacheGet<Awaited<ReturnType<typeof generateAdvice>>>(cacheKey);
     if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), market, cached: true });
 
@@ -105,7 +132,7 @@ export async function POST(request: Request) {
     if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
     if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
 
-    const advice = await generateAdvice({ holdings, positions, persona, risk, horizon, allowPerps, market, venues, locale });
+    const advice = await generateAdvice({ holdings, positions, outside, persona, risk, horizon, allowPerps, market, venues, locale });
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {

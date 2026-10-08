@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useT } from "@/lib/i18n/context";
+import type { OutsideKind, OutsidePriced } from "@/lib/outside";
 import type { PortfolioResponse } from "@/lib/types";
-import { BTN_PRIMARY, BTN_QUIET, Ring, SectionLabel, Spinner, chartColor, pct, sliceBy, usd, type ChartKey } from "./ui";
+import { BTN_PRIMARY, BTN_QUIET, OUTSIDE_COLOR, OUTSIDE_COLORS, Ring, SectionLabel, Spinner, chartColor, pct, sliceBy, usd, type Slice } from "./ui";
 
 const VISIBLE_ROWS = 12;
 
@@ -17,24 +18,48 @@ function heroSize(text: string): string {
   return "text-wordmark";
 }
 
-export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnalyze }: {
+export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnalyze, outside, onOutside }: {
   portfolio: PortfolioResponse;
   lastRead: { at: number; personaId: string } | null;
   scanning: boolean;
   onRescan: () => void;
   onAnalyze: () => void;
+  /** What the user stated they hold elsewhere, priced in dollars; empty when nothing is stated. */
+  outside: OutsidePriced[];
+  onOutside: () => void;
 }) {
   const t = useT();
-  const [picked, setPicked] = useState<ChartKey | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
 
   const { holdings, positions = [], totalUsd, errors } = portfolio;
-  const slices = sliceBy(holdings, (h) => h.category, (h) => h.valueUsd, t.chart);
+  // The ring is everything the user holds: wallets in colour, money elsewhere in gray.
+  const outsideUsd = outside.reduce((s, h) => s + h.valueUsd, 0);
+  const whole = totalUsd + outsideUsd;
+  const share = (v: number) => (whole > 0 ? (v / whole) * 100 : 0);
+  const byKind = new Map<OutsideKind, number>();
+  for (const h of outside) byKind.set(h.kind, (byKind.get(h.kind) ?? 0) + h.valueUsd);
+  const outsideSlices: Slice[] = [...byKind.entries()]
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([kind, v], i) => ({
+      key: `outside:${kind}`,
+      label: t.portfolio.elsewhereChip(t.outside.kinds[kind]),
+      chip: t.portfolio.elsewhereChip(t.outside.kinds[kind]),
+      color: OUTSIDE_COLORS[i % OUTSIDE_COLORS.length],
+      pct: share(v),
+      weight: v,
+    }));
+  const outsideColor = (kind: OutsideKind) => outsideSlices.find((s) => s.key === `outside:${kind}`)?.color ?? OUTSIDE_COLOR;
+  const slices: Slice[] = [
+    ...sliceBy(holdings, (h) => h.category, (h) => h.valueUsd, t.chart).map((s) => ({ ...s, pct: share(s.weight) })),
+    ...outsideSlices,
+  ];
   const cur = slices.find((s) => s.key === picked) ?? null;
   const chains = new Set(holdings.map((h) => h.chain)).size;
   const top = holdings.slice(0, VISIBLE_ROWS);
   const rest = holdings.slice(VISIBLE_ROWS);
   const restUsd = rest.reduce((s, h) => s + h.valueUsd, 0);
-  const weight = (v: number) => pct(totalUsd > 0 ? (v / totalUsd) * 100 : 0);
+  const weight = (v: number) => pct(share(v));
   const notional = positions.reduce((s, p) => s + p.notionalUsd, 0);
 
   const lens = lastRead ? t.personas[lastRead.personaId as keyof typeof t.personas]?.short : null;
@@ -42,7 +67,11 @@ export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnaly
 
   const center = cur
     ? { label: cur.label, value: pct(cur.pct), sub: usd(cur.weight) }
-    : { label: t.portfolio.totalValue, value: usd(totalUsd), sub: t.portfolio.positionsChains(holdings.length, chains) };
+    : {
+        label: t.portfolio.totalValue,
+        value: usd(whole),
+        sub: outside.length > 0 ? t.portfolio.inWallets(usd(totalUsd)) : t.portfolio.positionsChains(holdings.length, chains),
+      };
 
   return (
     <div className="flex flex-1 flex-col">
@@ -96,6 +125,7 @@ export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnaly
               </button>
             ))}
           </div>
+
         </div>
 
         <div className="min-w-0 flex-[999_1_420px]">
@@ -178,6 +208,31 @@ export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnaly
                 ))}
               </ul>
               <p className="mt-2 text-meta text-ink-3">{t.portfolio.marginNote}</p>
+            </div>
+          )}
+
+          {outside.length > 0 && (
+            <div className="mt-[26px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <SectionLabel>{t.portfolio.heldElsewhere}</SectionLabel>
+                <button type="button" onClick={onOutside} className="text-meta text-ink-2 underline underline-offset-2 hover:text-ink">
+                  {t.portfolio.edit}
+                </button>
+              </div>
+              <ul className="mt-1">
+                {outside.map((h) => (
+                  <li key={h.id} className="flex items-center gap-3 border-b border-hairline py-[11px]">
+                    <span className="size-[7px] flex-none rounded-full" style={{ background: outsideColor(h.kind) }} />
+                    <span className="min-w-0 flex-1 truncate text-row">
+                      {t.outside.kinds[h.kind]}
+                      {h.note && <span className="ml-1 text-meta text-ink-3">{h.note}</span>}
+                    </span>
+                    <span className="num min-w-[54px] text-right text-body text-ink-2">{weight(h.valueUsd)}</span>
+                    <span className="num min-w-[62px] text-right text-body">{usd(h.valueUsd)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-meta text-ink-3">{t.portfolio.elsewhereNote}</p>
             </div>
           )}
 

@@ -185,6 +185,61 @@ export const en = {
     liquidatesAt: "liquidates at",
     marginNote: "Margin is already counted above; this is extra exposure on top.",
     couldNotRead: (address: string, message: string) => `${address} could not be read: ${message}`,
+    inWallets: (usd: string) => `${usd} in your wallets`,
+    heldElsewhere: "Held elsewhere",
+    elsewhereChip: (kind: string) => `${kind} elsewhere`,
+    elsewhereNote: "In gray on the ring. The app can't move these; the lens counts them.",
+    edit: "Edit",
+  },
+
+  /** The step between portfolio and analyze: money the app cannot see or move. */
+  outside: {
+    titleLead: "What else do you ",
+    titleTail: "hold?",
+    intro:
+      "Cash in the bank, stocks, gold, coins on an exchange or in cold storage. The app can't move any of it, but the lens counts it — so it won't tell you to add euros you already have.",
+    kinds: {
+      cash: "Cash",
+      stocks: "Stocks & index funds",
+      bonds: "Bonds",
+      gold: "Gold",
+      realEstate: "Real estate",
+      bitcoin: "Bitcoin",
+      ethereum: "Ethereum",
+      otherCrypto: "Other crypto",
+      other: "Other",
+    },
+    /** Placeholder for the optional note, per kind. */
+    notePlaceholder: {
+      cash: "e.g. savings account",
+      stocks: "e.g. S&P 500 ETF",
+      bonds: "e.g. government bonds",
+      gold: "e.g. coins in a safe",
+      realEstate: "e.g. equity in the flat",
+      bitcoin: "e.g. cold wallet, exchange",
+      ethereum: "e.g. exchange account",
+      otherCrypto: "e.g. SOL on an exchange",
+      other: "e.g. company shares",
+    },
+    what: "What",
+    howMuch: "How much",
+    unit: "Unit",
+    note: "Note (optional)",
+    add: "Add",
+    amountInvalid: "Enter an amount above zero.",
+    remove: (label: string) => `Remove ${label}`,
+    empty: "Nothing added yet. If everything you own is in the wallets above, just continue.",
+    heldElsewhere: "Held elsewhere",
+    elsewhereChip: (kind: string) => `${kind} elsewhere`,
+    onChain: "In your wallets",
+    shareOfAll: (pct: string) => `${pct} of everything you hold is what this app can move.`,
+    ratesLoading: "Getting exchange rates…",
+    ratesFailed: "Exchange rates are unavailable right now. Retry, or state amounts in US dollars.",
+    rateMissing: "no rate",
+    retry: "Retry",
+    continue: "Continue",
+    continueEmpty: "Nothing else — continue",
+    staysHere: "Saved on this device only. Nothing is sent until you run the analysis.",
   },
 
   analyze: {
@@ -207,6 +262,10 @@ export const en = {
     connectWallet: "Connect a wallet",
     verifyWith: (name: string) => `Verify with ${name}`,
     signatureCancelled: "Signature cancelled in the wallet.",
+    elsewhere: (usd: string, n: number) => `Also counting ${usd} held elsewhere, in ${n} item${n === 1 ? "" : "s"}.`,
+    elsewhereNone: "Hold cash, stocks or coins elsewhere? Add them so the lens sees the whole picture.",
+    edit: "Edit",
+    addElsewhere: "Add",
   },
 
   verdict: {
@@ -238,6 +297,10 @@ export const en = {
     seeSignals: "See signals",
     ringLabel: (outer: string, inner: string) => `Two concentric rings. Outer ring is the target: ${outer}. Inner ring is today: ${inner}.`,
     percent: (n: string) => `${n} percent`,
+    wholePicture: "The whole picture",
+    onChainShare: (usd: string, pct: string) => `${usd} in your wallets — ${pct} of everything. The plan below moves only that part.`,
+    inWallets: "In your wallets",
+    wholeBarLabel: (parts: string) => `Whole portfolio: ${parts}.`,
   },
 
   plan: {

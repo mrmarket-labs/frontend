@@ -5,7 +5,7 @@ import { HORIZONS, RISK_LEVELS, type Horizon, type RiskLevel } from "@/lib/optio
 import { PERSONAS } from "@/lib/personas";
 import type { SessionInfo } from "@/lib/wallets/signin";
 import { shortAddress, type Wallet } from "@/lib/wallets/types";
-import { BTN_PRIMARY, BTN_TONAL, SectionLabel, Spinner, Toggle } from "./ui";
+import { BTN_PRIMARY, BTN_TONAL, SectionLabel, Spinner, Toggle, usd } from "./ui";
 
 function Segmented<T extends string>({ label, options, names, value, onChange, disabled }: {
   label: string;
@@ -39,7 +39,7 @@ function Segmented<T extends string>({ label, options, names, value, onChange, d
 export function AnalyzeView({
   personaId, risk, horizon, allowPerps, onPersona, onRisk, onHorizon, onPerps,
   session, signableWallets, signingIn, signInError, onVerify, onSignOut, onWallets,
-  canAdvise, advising, adviceError, onAdvise,
+  outside, onOutside, canAdvise, advising, adviceError, onAdvise,
 }: {
   personaId: string;
   risk: RiskLevel;
@@ -56,6 +56,9 @@ export function AnalyzeView({
   onVerify: (walletId: string) => void;
   onSignOut: () => void;
   onWallets: () => void;
+  /** Money stated on the previous step; `usd` is null while its rates are still loading. */
+  outside: { usd: number | null; count: number } | null;
+  onOutside: () => void;
   canAdvise: boolean;
   advising: boolean;
   adviceError: string | null;
@@ -99,6 +102,15 @@ export function AnalyzeView({
             <div className="text-body font-medium">{t.analyze.allowPerps}</div>
             <div className="mt-[3px] text-meta leading-[1.4] text-ink-2">{t.analyze.allowPerpsNote}</div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-input bg-surface-control px-3.5 py-2.5">
+          <p className="min-w-0 flex-1 text-meta leading-normal text-ink-2">
+            {outside ? t.analyze.elsewhere(outside.usd == null ? "…" : usd(outside.usd), outside.count) : t.analyze.elsewhereNone}
+          </p>
+          <button type="button" onClick={onOutside} disabled={advising} className="flex h-tap flex-none items-center text-label text-ink underline underline-offset-2 disabled:opacity-40">
+            {outside ? t.analyze.edit : t.analyze.addElsewhere}
+          </button>
         </div>
       </div>
 

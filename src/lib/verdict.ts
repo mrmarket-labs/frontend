@@ -1,6 +1,7 @@
 import type { Advice } from "./advisor";
 import type { Locale } from "./i18n";
 import type { Horizon, RiskLevel } from "./options";
+import type { OutsidePriced } from "./outside";
 import type { Step } from "./plan";
 import type { Trade } from "./rebalance";
 import type { Holding } from "./types";
@@ -11,6 +12,8 @@ export interface Verdict {
   trades: Trade[];
   /** Holdings the plan was built from; the plan stays fixed while the portfolio view refreshes. */
   holdings: Holding[];
+  /** Money outside the app the read counted, priced at the time; absent on older verdicts. */
+  outside?: OutsidePriced[];
   steps: Step[];
   personaId: string;
   risk: RiskLevel;
