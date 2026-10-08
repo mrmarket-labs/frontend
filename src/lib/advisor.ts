@@ -129,11 +129,10 @@ const OUTSIDE_LABELS: Record<OutsideKind, string> = {
   stocks: "Stocks / index funds",
   bonds: "Bonds",
   gold: "Gold",
-  realEstate: "Real estate",
   bitcoin: "Bitcoin (BTC)",
   ethereum: "Ethereum (ETH)",
   otherCrypto: "Other crypto",
-  other: "Other",
+  other: "Other investable assets",
 };
 
 /** One line per kind, notes folded in, so the model sees the whole balance sheet in a glance. */

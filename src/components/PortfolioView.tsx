@@ -211,7 +211,11 @@ export function PortfolioView({ portfolio, lastRead, scanning, onRescan, onAnaly
             </div>
           )}
 
-          {outside.length > 0 && (
+          {outside.length === 0 ? (
+            <button type="button" onClick={onOutside} className={`${BTN_QUIET} mt-[26px] h-tap w-full`}>
+              {t.portfolio.addElsewhere}
+            </button>
+          ) : (
             <div className="mt-[26px]">
               <div className="flex items-baseline justify-between gap-3">
                 <SectionLabel>{t.portfolio.heldElsewhere}</SectionLabel>

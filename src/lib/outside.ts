@@ -1,11 +1,11 @@
 import type { Category } from "./types";
 
 /**
- * Money the app cannot see or move: bank cash, a brokerage account, gold, coins on an exchange or
- * in cold storage. The lens still counts it, so the on-chain targets balance the whole picture
- * rather than a sleeve of it.
+ * Investable assets the app cannot read or move: bank cash, a brokerage account, gold, coins on
+ * an exchange or in cold storage. Not a home or a business, which cannot be rebalanced. The lens
+ * still counts them, so the on-chain targets balance the whole picture rather than a sleeve of it.
  */
-export const OUTSIDE_KINDS = ["cash", "stocks", "bonds", "gold", "realEstate", "bitcoin", "ethereum", "otherCrypto", "other"] as const;
+export const OUTSIDE_KINDS = ["cash", "stocks", "bonds", "gold", "bitcoin", "ethereum", "otherCrypto", "other"] as const;
 export type OutsideKind = (typeof OUTSIDE_KINDS)[number];
 
 export const FIATS = ["USD", "EUR", "GBP", "CHF", "CNY", "JPY"] as const;
@@ -49,7 +49,6 @@ export const OUTSIDE_CATEGORY: Record<OutsideKind, Category | null> = {
   stocks: "tokenized-stock",
   bonds: null,
   gold: "tokenized-gold",
-  realEstate: null,
   bitcoin: "bitcoin",
   ethereum: "ethereum",
   otherCrypto: "large-cap",

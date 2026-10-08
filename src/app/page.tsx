@@ -24,7 +24,7 @@ import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progres
 import { getSession, signIn, signOut, signableAddress, type SessionInfo } from "@/lib/wallets/signin";
 import { useWallets } from "@/lib/wallets/useWallets";
 
-/** connect ──▶ portfolio ──▶ outside ──▶ analyze ──▶ verdict; portfolio, verdict and signals are the tabs. */
+/** connect ──▶ portfolio ──▶ analyze ──▶ verdict; portfolio, verdict and signals are the tabs; outside is a side step. */
 type View = "connect" | "outside" | "analyze" | Tab;
 
 /** A failed API call: the server's message in the user's language, plus a code where it sends one. */
@@ -64,6 +64,8 @@ export default function Home() {
 
   // Money the app cannot see: stated by hand, priced with rates the server fetches.
   const [outside, setOutside] = useState<OutsideHolding[]>([]);
+  // The outside step is reached from the portfolio or from analyze; "Done" returns to whichever.
+  const outsideFrom = useRef<View>("portfolio");
   const [fx, setFx] = useState<Rates | null>(null);
   const [fxError, setFxError] = useState(false);
 
@@ -116,6 +118,11 @@ export default function Home() {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [loadFx]);
+
+  function openOutside(from: View) {
+    outsideFrom.current = from;
+    go("outside");
+  }
 
   function changeOutside(items: OutsideHolding[]) {
     setOutside(items);
@@ -292,9 +299,9 @@ export default function Home() {
             lastRead={verdict ? { at: verdict.at, personaId: verdict.personaId } : null}
             scanning={scanning}
             onRescan={() => void scan()}
-            onAnalyze={() => go("outside")}
+            onAnalyze={() => go("analyze")}
             outside={outsidePriced}
-            onOutside={() => go("outside")}
+            onOutside={() => openOutside("portfolio")}
           />
         )}
         {shown === "outside" && (
@@ -305,7 +312,7 @@ export default function Home() {
             ratesError={fxError}
             onRetryRates={() => void loadFx()}
             onChainUsd={portfolio.totalUsd}
-            onContinue={() => go("analyze")}
+            onContinue={() => go(outsideFrom.current)}
           />
         )}
         {shown === "analyze" && (
@@ -326,7 +333,7 @@ export default function Home() {
             onSignOut={() => signOut().then(() => setSession(null))}
             onWallets={() => go("connect")}
             outside={outside.length > 0 ? { usd: outsideUsd, count: outside.length } : null}
-            onOutside={() => go("outside")}
+            onOutside={() => openOutside("analyze")}
             canAdvise={portfolio.holdings.length > 0}
             advising={advising}
             adviceError={adviceError}

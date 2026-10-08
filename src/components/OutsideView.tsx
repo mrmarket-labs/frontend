@@ -213,7 +213,7 @@ export function OutsideView({ items, onChange, rates, ratesError, onRetryRates, 
 
       <div>
         <button type="button" onClick={onContinue} disabled={!canContinue} className={`${BTN_PRIMARY} h-[52px] w-full`}>
-          {items.length === 0 ? t.outside.continueEmpty : t.outside.continue} <span className="font-mono">→</span>
+          {items.length === 0 ? t.outside.continueEmpty : t.outside.continue}
         </button>
         <p className="mt-2.5 text-center text-meta text-ink-3">{t.outside.staysHere}</p>
       </div>
