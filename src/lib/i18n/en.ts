@@ -325,6 +325,7 @@ export const en = {
     tagFrees: "Frees cash for a later step",
     tagNarrows: "Narrows the gap",
     onItsOwn: "On its own",
+    why: "Why",
     staysAt: (asset: string, pct: string) => `${asset} stays at ${pct}`,
     parkedPart: (usd: string) => `~${usd} of it is parked as USDC for a later step.`,
     parkedAll: "Parked as USDC for a later step.",

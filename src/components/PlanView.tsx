@@ -29,6 +29,29 @@ function swapAssets(step: SwapStep, verdict: Verdict): { sell: string; buy: stri
   return { sell: held?.asset ?? step.sell.symbol, buy: target?.asset ?? alreadyHeld?.asset ?? step.buy.symbol };
 }
 
+/**
+ * The advisor's own words for a move: why to let go of what is sold, why what is bought earns its
+ * place. Parking in a stablecoin has no "buy" reason; the parked note covers it.
+ */
+function whyLine(verdict: Verdict, sell: string | null, buy: string | null): string | null {
+  const same = (a: string, b: string) => a.toUpperCase() === b.toUpperCase();
+  const trim = sell ? verdict.advice.trims?.find((x) => same(x.asset, sell))?.reason : null;
+  const add = buy ? verdict.advice.allocations.find((a) => same(a.asset, buy))?.rationale : null;
+  const parts = [trim, add].filter((x): x is string => Boolean(x));
+  return parts.length ? parts.join(" ") : null;
+}
+
+function WhyRow({ text }: { text: string | null }) {
+  const t = useT();
+  if (!text) return null;
+  return (
+    <div className="mt-[9px] flex gap-x-2">
+      <span className="flex-none text-meta text-ink-4">{t.plan.why}</span>
+      <p className="min-w-0 text-meta leading-normal text-ink-2">{text}</p>
+    </div>
+  );
+}
+
 /** What this one swap does to the allocation if nothing else is taken. */
 function impactLine(step: SwapStep, verdict: Verdict, t: Dict): string {
   const total = verdict.holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
@@ -88,6 +111,8 @@ function SwapCard({ step, verdict, wallet, p, tag, open, onToggle, onReview, onW
   const canSign = wallet?.mode === "connected";
   const owner = wallet?.label ?? shortAddress(step.address);
   const parkedNote = step.parkedUsd < step.sell.usd - 1 ? t.plan.parkedPart(usd(step.parkedUsd)) : t.plan.parkedAll;
+  const { sell, buy } = swapAssets(step, verdict);
+  const why = whyLine(verdict, sell, step.parkedUsd >= step.sell.usd - 1 ? null : buy);
 
   return (
     <li className={`rounded-card-sm bg-surface px-[15px] py-3.5 lg:bg-surface-control ${p ? "opacity-60" : ""}`}>
@@ -116,6 +141,7 @@ function SwapCard({ step, verdict, wallet, p, tag, open, onToggle, onReview, onW
         <span className="num text-meta text-ink-2">{impactLine(step, verdict, t)}</span>
       </div>
       {step.parkedUsd > 0 && <p className="mt-1.5 text-meta leading-normal text-ink-3">{parkedNote}</p>}
+      {!p && <WhyRow text={why} />}
 
       {p ? (
         <DoneRow step={step} p={p} />
@@ -142,8 +168,15 @@ function SwapCard({ step, verdict, wallet, p, tag, open, onToggle, onReview, onW
   );
 }
 
-function ManualCard({ step, wallet, p, onMarkDone }: { step: ManualStep; wallet: Wallet | undefined; p: StepProgress | undefined; onMarkDone: (step: Step) => void }) {
+function ManualCard({ step, verdict, wallet, p, onMarkDone }: {
+  step: ManualStep;
+  verdict: Verdict;
+  wallet: Wallet | undefined;
+  p: StepProgress | undefined;
+  onMarkDone: (step: Step) => void;
+}) {
   const t = useT();
+  const why = step.move ? whyLine(verdict, step.move.action === "sell" ? step.move.asset : null, step.move.action === "buy" ? step.move.asset : null) : null;
   return (
     <li className={`rounded-card-sm bg-surface px-[15px] py-3.5 lg:bg-surface-control ${p ? "opacity-60" : ""}`}>
       <div className="flex items-center justify-between gap-2.5">
@@ -162,6 +195,7 @@ function ManualCard({ step, wallet, p, onMarkDone }: { step: ManualStep; wallet:
       ) : (
         <>
           <p className="mt-1.5 text-meta leading-normal text-ink-2">{step.detail}</p>
+          <WhyRow text={why} />
           <button type="button" onClick={() => onMarkDone(step)} className={`${BTN_TONAL} mt-[11px] h-tap w-full px-3`}>
             {t.plan.markDone}
           </button>
@@ -232,7 +266,7 @@ export function PlanView({ verdict, wallets, progress, onReview, onMarkDone, onW
           <SectionLabel className="mt-5">{t.plan.outsideTheApp}</SectionLabel>
           <ul className="mt-2.5 flex flex-col gap-2.5">
             {manual.map((step) => (
-              <ManualCard key={step.id} step={step} wallet={step.address ? wallets.walletFor(step.address) : undefined} p={progress[step.id]} onMarkDone={onMarkDone} />
+              <ManualCard key={step.id} step={step} verdict={verdict} wallet={step.address ? wallets.walletFor(step.address) : undefined} p={progress[step.id]} onMarkDone={onMarkDone} />
             ))}
           </ul>
         </>

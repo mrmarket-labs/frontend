@@ -30,6 +30,8 @@ export interface ManualStep {
   title: string;
   detail: string;
   usd: number;
+  /** The canonical asset this step sells or buys, so the advisor's reasons can be shown beside it. */
+  move?: { action: "sell" | "buy"; asset: string };
 }
 
 export type Step = SwapStep | ManualStep;
@@ -133,6 +135,7 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
           title: s.sellTitle(usd0(usd), h.symbol, CHAIN_LABELS[h.chain]),
           detail: h.chain === "bitcoin" ? s.sellBitcoin : isExecChain(h.chain) ? s.sellRescan : s.sellHyperliquid,
           usd,
+          move: { action: "sell", asset: h.asset },
         });
     }
   }
@@ -165,6 +168,7 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
                 ? s.buyBitcoin
                 : s.buyUnlisted(instrument),
         usd: t.usd,
+        move: { action: "buy", asset: t.asset },
       });
   }
 
@@ -194,6 +198,7 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
         title: s.addStableTitle(usd0(remaining), t.asset),
         detail: s.addStableDetail(usd0(remaining), t.asset),
         usd: remaining,
+        move: { action: "buy", asset: t.asset },
       });
   }
 
@@ -245,6 +250,7 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
         ? s.fundWithSurplus(surplusNote, CHAIN_LABELS[d.chain], d.buy.instrument)
         : s.fundFromOutside(usd0(d.usd), CHAIN_LABELS[d.chain], d.buy.instrument),
       usd: d.usd,
+      move: { action: "buy", asset: d.buy.asset },
     });
   }
 
