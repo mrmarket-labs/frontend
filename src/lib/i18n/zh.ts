@@ -306,6 +306,7 @@ export const zh: Dict = {
     tagFrees: "为后续步骤腾出资金",
     tagNarrows: "缩小差距",
     onItsOwn: "单独来看",
+    why: "原因",
     staysAt: (asset: string, pct: string) => `${asset} 保持在 ${pct}`,
     parkedPart: (usd: string) => `其中约 ${usd} 暂存为 USDC，供后续步骤使用。`,
     parkedAll: "暂存为 USDC，供后续步骤使用。",

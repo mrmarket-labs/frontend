@@ -75,6 +75,14 @@ export const AdviceSchema = z.object({
       }),
     )
     .describe("Target portfolio, 3-10 positions"),
+  trims: z
+    .array(
+      z.object({
+        asset: z.string().describe("Canonical asset the user currently holds, exactly as it appears in the current portfolio"),
+        reason: z.string().describe("One or two sentences: why to sell some or all of it, in the persona's spirit, specific to this asset and this portfolio"),
+      }),
+    )
+    .describe("One entry for every currently held asset whose weight the target reduces or removes. Empty if nothing is sold."),
   risks: z.array(z.string()).describe("2-4 specific risks of the target portfolio (depegs, custody, tokenized-stock issuer risk, ...)"),
   executionTips: z.array(z.string()).describe("2-4 practical tips: staging entries, fees, tax, staking idle SOL/ETH"),
 });
@@ -186,11 +194,12 @@ Rules:
 - Percentages must sum to exactly 100.
 - Leveraged perp positions are exposure on top of the holdings (their margin is already inside the holdings). Account for them in the diagnosis, risk scores and risks, and say plainly whether the persona would keep, reduce or close them. Allocations cover holdings only; never allocate to perps.
 - Holdings outside the app (bank cash, brokerage, gold, coins on an exchange or in cold storage) cannot be moved here, but they are part of the user's wealth. When any are reported, judge the WHOLE portfolio and choose the on-chain targets so the whole balances: cash outside already does the stablecoin job, so do not pile stablecoins on-chain on top of a large cash position (keep only what the on-chain plan needs as dry powder); BTC or ETH held outside already is bitcoin or ether exposure, so size the on-chain BTC/ETH accordingly; stocks or index funds outside already are equity exposure, so tokenized stocks on-chain add little; gold outside already is the gold hedge. Conversely, if the user holds nothing defensive outside, the on-chain sleeve carries that job. Say this reasoning plainly in wholePicture, and let the diagnosis and risk scores describe the whole portfolio. The allocations still describe the on-chain portfolio only and still sum to 100 of it, because that is the only part that can be traded here.
+- Every allocation's rationale must say why this asset earns its place and why at that size; it is shown next to the trade that buys it. For every held asset you reduce or remove, give a trims entry saying why; it is shown next to the trade that sells it.
 - Be direct and specific. This is educational analysis, not personalized financial advice.`;
 
 const LANGUAGE_RULE: Record<Locale, string> = {
   en: "Write every free-text field in English.",
-  zh: "Write every free-text field (verdict, diagnosis, marketView, personaTake, wholePicture, rationale, risks, executionTips) in Simplified Chinese. Keep tickers, venue ids and instrument names exactly as given in the universe.",
+  zh: "Write every free-text field (verdict, diagnosis, marketView, personaTake, wholePicture, rationale, trims, risks, executionTips) in Simplified Chinese. Keep tickers, venue ids and instrument names exactly as given in the universe.",
 };
 
 /** Error texts the route maps to the user's language. */
