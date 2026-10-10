@@ -4,7 +4,7 @@ import { cached } from "./http";
 /** HIP-3 perp DEX run by trade.xyz on Hyperliquid: stock indices and commodities. */
 const XYZ_DEX = "xyz";
 const PERP_MARKETS = ["SP500", "XYZ100", "GOLD", "SILVER", "NVDA"];
-const SPOT_TOKENS = ["XAUT0", "SPYX", "QQQX", "NVDAX"];
+const SPOT_TOKENS = ["UBTC", "UETH", "USOL", "HYPE", "XAUT0", "SPYX", "QQQX", "NVDAX"];
 const HOURS_PER_YEAR = 24 * 365;
 
 export interface SpotMarket {

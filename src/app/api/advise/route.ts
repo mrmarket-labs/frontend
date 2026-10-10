@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
-import { AdviceError, generateAdvice } from "@/lib/advisor";
+import { AdviceError, PROMPT_VERSION, generateAdvice } from "@/lib/advisor";
 import { CATEGORY_LABELS } from "@/lib/classify";
 import { dict, localeFromRequest } from "@/lib/i18n";
 import { getMarketSnapshot } from "@/lib/market";
@@ -39,7 +39,7 @@ async function adviceCacheKey(
   const byKind = new Map<string, number>();
   for (const h of outside) byKind.set(h.kind, (byKind.get(h.kind) ?? 0) + h.valueUsd);
   const outsideShape = [...byKind.entries()].map(([k, v]) => [k, Math.round((v / total) * 10)] as const).sort();
-  const fingerprint = JSON.stringify({ shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime });
+  const fingerprint = JSON.stringify({ v: PROMPT_VERSION, shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
   return `advcache:${Buffer.from(digest).toString("hex").slice(0, 32)}`;
 }

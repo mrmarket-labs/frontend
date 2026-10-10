@@ -174,10 +174,33 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
       });
   }
 
+  // A buy on a chain with nothing being sold there can draw on stablecoins already sitting on
+  // that chain instead of waiting for a bridge. The reserve is then rebuilt where proceeds are.
+  const buyUsdOn = (c: ExecChain) => (buys.get(c) ?? []).reduce((s, l) => s + l.usd, 0);
+  let spentStables = 0;
+  for (const chain of [...buys.keys()]) {
+    let deficit = buyUsdOn(chain) - sellUsdOn(chain);
+    if (deficit < MIN_STEP_USD) continue;
+    for (const h of holdings.filter((h) => h.chain === chain && isStable(h.symbol) && h.tokenAddress && h.decimals != null)) {
+      const alreadySelling = (sells.get(chain) ?? []).filter((l) => l.holding === h).reduce((s, l) => s + l.usd, 0);
+      const take = Math.min(deficit, h.valueUsd - alreadySelling);
+      if (take < MIN_STEP_USD) continue;
+      push(sells, chain, { holding: h, chain, token: { symbol: h.symbol, address: h.tokenAddress!, decimals: h.decimals! }, usd: take });
+      spentStables += take;
+      deficit -= take;
+      if (deficit < MIN_STEP_USD) break;
+    }
+  }
+
   // Stablecoins are the same asset on every chain, so buy them wherever proceeds are left over
   // instead of bridging. Whatever no chain can cover has to come from outside.
-  const buyUsdOn = (c: ExecChain) => (buys.get(c) ?? []).reduce((s, l) => s + l.usd, 0);
-  for (const t of buyTrades.filter((t) => isStable(t.asset))) {
+  const stableBuys = buyTrades.filter((t) => isStable(t.asset));
+  if (spentStables >= MIN_STEP_USD) {
+    // What was spent above has to come back into the reserve, from wherever there is surplus.
+    if (stableBuys.length > 0) stableBuys[0] = { ...stableBuys[0], usd: stableBuys[0].usd + spentStables };
+    else stableBuys.push({ action: "buy", asset: "USDC", usd: spentStables, currentPct: 0, targetPct: 0, heldAs: [] });
+  }
+  for (const t of stableBuys) {
     let remaining = t.usd;
     const capacity = [...sells.keys()]
       .map((c) => ({ chain: c, cap: sellUsdOn(c) - buyUsdOn(c) }))

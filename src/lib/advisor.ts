@@ -24,11 +24,12 @@ function buildUniverse(venues: HyperliquidVenues | null, allowPerps: boolean): s
   };
   const lines = [
     "Format: canonical asset -> where to buy it (venue: instrument). Use the canonical asset in `asset` and the exact ticker in `instrument`.",
+    "The app executes swaps on solana, ethereum and ethereum-l2, and spot orders on hyperliquid-spot, in the user's own wallet. Buying on bitcoin, hyperliquid-perp, or anything that needs a bridge is a manual step for the user.",
     "USDC, USDT -> any chain the user already holds funds on",
-    "BTC -> bitcoin: BTC | ethereum or ethereum-l2: cbBTC/WBTC | hyperliquid-spot: UBTC",
-    "ETH -> ethereum or ethereum-l2: ETH or wstETH (staked) | hyperliquid-spot: UETH",
-    "SOL -> solana: SOL or JitoSOL (staked)",
-    "LINK, AAVE -> ethereum | JUP -> solana | HYPE -> hyperliquid-spot: HYPE (can be staked)",
+    `BTC -> bitcoin: BTC | ethereum or ethereum-l2: cbBTC/WBTC | hyperliquid-spot: UBTC${spotVol("UBTC")}`,
+    `ETH -> ethereum or ethereum-l2: ETH or wstETH (staked) | hyperliquid-spot: UETH${spotVol("UETH")}`,
+    `SOL -> solana: SOL or JitoSOL (staked) | hyperliquid-spot: USOL${spotVol("USOL")}`,
+    `LINK, AAVE -> ethereum | JUP -> solana | HYPE -> hyperliquid-spot: HYPE${spotVol("HYPE")} (can be staked)`,
     `GOLD -> hyperliquid-spot: XAUT0${spotVol("XAUT0")} | ethereum: PAXG or XAUT | solana: PAXG`,
     "Tokenized stocks (canonical = xStock ticker in caps, e.g. SPYX, QQQX, NVDAX, AAPLX, GOOGLX, TSLAX, COINX, MSTRX, CRCLX) ->",
     "  solana: SPYx, QQQx, NVDAx, AAPLx, GOOGLx, TSLAx, COINx, MSTRx, CRCLx (xStocks; deepest spot liquidity)",
@@ -48,6 +49,9 @@ function buildUniverse(venues: HyperliquidVenues | null, allowPerps: boolean): s
   }
   return lines.join("\n");
 }
+
+/** Bump when the prompt changes materially, so cached answers from the old prompt are not reused. */
+export const PROMPT_VERSION = 2;
 
 export const AdviceSchema = z.object({
   verdict: z.string().describe("One punchy sentence answering: is the user holding the right assets?"),
@@ -188,6 +192,7 @@ Rules:
 - Reason through the lens of the selected investor's publicly known philosophy. You are inspired by them; never claim to be them or invent quotes.
 - Pick only from the investable universe given. Use canonical assets (BTC not WBTC, SOL not JitoSOL, GOLD not PAXG) and name the venue and exact instrument for each.
 - Choose venues to minimize friction: prefer a venue where the user already holds that asset or the stablecoins to fund it, so no bridging is needed. Override this when that venue's daily volume is too thin for the order (avoid orders above ~5% of 24h volume).
+- Stablecoins sitting on Hyperliquid can only be used there, short of a manual withdrawal, so they make a poor cash reserve: keep the reserve on ethereum-l2 or solana, where it can fund later swaps in-app, and spend Hyperliquid stablecoins on hyperliquid-spot in an asset the target holds (BTC as UBTC, ETH as UETH, SOL as USOL, GOLD as XAUT0, HYPE) when the volume allows. Do this by splitting that asset across venues: one allocation on hyperliquid-spot sized to the stablecoins already there, the rest wherever it is cheapest. It costs no extra sells; it only changes where each dollar lands.
 - This is a buy-and-hold app: own spot assets. Only if perps are allowed, use a 1x long perp where it clearly beats spot (spot too illiquid or unavailable, or a short horizon), state its annual funding cost in the rationale, and keep perps a minority of the portfolio.
 - Respect the user's risk tolerance and horizon; let current market conditions tilt the allocation (e.g. more stablecoins in euphoric or downtrending markets, more risk when fear is extreme and trend is turning up), but the persona's philosophy dominates.
 - Prefer fewer, larger positions over many tiny ones. Minimize unnecessary trades, since every swap costs fees and active trading rarely beats holding.

@@ -30,19 +30,16 @@ export function computeTrades(holdings: Holding[], advice: Advice): Trade[] {
     entry.heldAs.add(`${h.symbol} on ${h.chain}`);
     current.set(key, entry);
   }
-  // The advisor may split one asset across venues (native BTC + cbBTC). Sum the target and
-  // route the buy to the venue the app can execute on, or failing that the largest slice.
-  const EXECUTABLE = new Set(["solana", "ethereum", "ethereum-l2"]);
-  const targets = new Map<string, Advice["allocations"][number]>();
+  // The advisor may split one asset across venues (cbBTC on Ethereum + UBTC on Hyperliquid).
+  // The gap is judged on the asset's summed target; a buy then lands on each venue in proportion.
+  type Slice = Advice["allocations"][number];
+  const targets = new Map<string, { asset: string; targetPct: number; slices: Slice[] }>();
   for (const a of advice.allocations) {
     const key = a.asset.toUpperCase();
-    const prev = targets.get(key);
-    if (!prev) {
-      targets.set(key, { ...a });
-      continue;
-    }
-    const preferNew = EXECUTABLE.has(a.venue) && (!EXECUTABLE.has(prev.venue) || a.targetPct > prev.targetPct);
-    targets.set(key, { ...(preferNew ? a : prev), targetPct: prev.targetPct + a.targetPct });
+    const entry = targets.get(key) ?? { asset: a.asset, targetPct: 0, slices: [] };
+    entry.targetPct += a.targetPct;
+    entry.slices.push(a);
+    targets.set(key, entry);
   }
 
   const trades: Trade[] = [];
@@ -53,15 +50,19 @@ export function computeTrades(holdings: Holding[], advice: Advice): Trade[] {
     const targetPct = target?.targetPct ?? 0;
     const diffPct = targetPct - currentPct;
     if (Math.abs(diffPct) < MIN_TRADE_PCT) continue;
-    trades.push({
-      action: diffPct > 0 ? "buy" : "sell",
-      asset: target?.asset ?? key,
-      usd: Math.abs((diffPct / 100) * total),
-      currentPct,
-      targetPct,
-      heldAs: cur ? [...cur.heldAs] : [],
-      venue: target?.venue,
-      instrument: target?.instrument,
+    const usd = Math.abs((diffPct / 100) * total);
+    const slices = [...(target?.slices ?? [])].sort((a, b) => b.targetPct - a.targetPct);
+    const base = { asset: target?.asset ?? key, currentPct, targetPct, heldAs: cur ? [...cur.heldAs] : [] };
+    if (diffPct < 0 || !target) {
+      trades.push({ ...base, action: "sell", usd, venue: slices[0]?.venue, instrument: slices[0]?.instrument });
+      continue;
+    }
+    // Slices too small to be worth a trade fold into the largest one.
+    const parts = slices.map((s) => (usd * s.targetPct) / target.targetPct);
+    const small = parts.reduce((sum, p, i) => (i > 0 && (p / total) * 100 < MIN_TRADE_PCT ? sum + p : sum), 0);
+    slices.forEach((s, i) => {
+      const part = i === 0 ? parts[0] + small : (parts[i] / total) * 100 < MIN_TRADE_PCT ? 0 : parts[i];
+      if (part > 0) trades.push({ ...base, action: "buy", usd: part, venue: s.venue, instrument: s.instrument });
     });
   }
   // Sells first: they fund the buys.
