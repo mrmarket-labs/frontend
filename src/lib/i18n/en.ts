@@ -380,7 +380,8 @@ export const en = {
     noFee: "none on this trade",
     youAreBuying: (symbol: string) => `You are buying ${symbol}.`,
     approvalNote: (amount: string, symbol: string) => `Your wallet will first ask to approve exactly ${amount} ${symbol} for the swap contract, then the swap itself.`,
-    builderApprovalNote: (pct: string) => `Your wallet will first ask you to approve the app's ${pct} fee on Hyperliquid orders, once. After that, each order is one signature.`,
+    agentApprovalNote: "Your wallet will first ask you to approve a trading key for this browser, once. The key can place orders on Hyperliquid and nothing else; it can never withdraw. After that, orders need no wallet prompt.",
+    builderApprovalNote: (pct: string) => `Your wallet will also ask you to approve the app's ${pct} fee on Hyperliquid orders, once.`,
     hyperliquidNote: "An immediate-or-cancel order on Hyperliquid spot. Hyperliquid's own taker fee applies; a swap between two tokens is two orders through USDC.",
     phases: {
       approving: "Approve the token in your wallet…",
@@ -388,8 +389,8 @@ export const en = {
       confirming: "Sent. Rebroadcasting until the network confirms it…",
     },
     hyperliquidPhases: {
-      approving: "Approve the fee in your wallet…",
-      signing: "Sign the order in your wallet…",
+      approving: "Approve in your wallet…",
+      signing: "Placing the order on Hyperliquid…",
       confirming: "Filled. Fetching the fill record…",
     },
     cancelled: "You cancelled the request in your wallet.",

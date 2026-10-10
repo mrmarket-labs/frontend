@@ -1,4 +1,4 @@
-import { approveBuilderFee, fillHash, placeOrder, type OrderStatus } from "../hyperliquid/sign";
+import { agentIsApproved, approveAgent, approveBuilderFee, fillHash, loadOrCreateAgent, placeOrder, type OrderStatus } from "../hyperliquid/sign";
 import { floatToWire, roundSize, type HyperliquidLeg } from "../hyperliquid/spot";
 import { AppError } from "../i18n";
 import type { SwapStep } from "../plan";
@@ -43,6 +43,8 @@ export interface HyperliquidQuote {
   feeUsd: number;
   route: string[];
   builder: { address: string; feeTenthsBp: number; maxFeeRate: string; approved: boolean } | null;
+  /** Whether this browser's API wallet may already place orders for the user. */
+  agentApproved: boolean;
 }
 
 export type Quote = SolanaQuote | EvmQuote | HyperliquidQuote;
@@ -61,12 +63,15 @@ export function sellAmountRaw(step: SwapStep): string {
 
 export async function fetchQuote(step: SwapStep): Promise<Quote> {
   if (step.chain === "hyperliquid") {
-    const q = await api<Omit<HyperliquidQuote, "kind">>("/api/swap/hyperliquid", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sellToken: step.sell.token.address, buyToken: step.buy.token.address, amount: step.sell.amount, user: step.address }),
-    });
-    return { kind: "hyperliquid", ...q };
+    const [q, agentApproved] = await Promise.all([
+      api<Omit<HyperliquidQuote, "kind" | "agentApproved">>("/api/swap/hyperliquid", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sellToken: step.sell.token.address, buyToken: step.buy.token.address, amount: step.sell.amount, user: step.address }),
+      }),
+      agentIsApproved(step.address, loadOrCreateAgent(step.address).address),
+    ]);
+    return { kind: "hyperliquid", ...q, agentApproved };
   }
   if (step.chain === "solana") {
     const q = await api<Omit<SolanaQuote, "kind">>("/api/swap/solana", {
@@ -106,8 +111,8 @@ export function describeQuote(step: SwapStep, quote: Quote) {
       priceImpactPct: quote.priceImpactPct,
       networkFeeUsd: null,
       route: quote.route,
-      // A one-time signature lets the exchange pay the app's fee out of the order.
-      needsApproval: quote.builder != null && !quote.builder.approved,
+      // One-time signatures: this browser's API wallet, and (when set) the app's fee.
+      needsApproval: !quote.agentApproved || (quote.builder != null && !quote.builder.approved),
     };
   const out = fromRawUnits(quote.kind === "solana" ? quote.outAmount : quote.buyAmount, step.buy.token.decimals);
   const minOut = fromRawUnits(quote.kind === "solana" ? quote.minOutAmount : quote.minBuyAmount, step.buy.token.decimals);
@@ -208,8 +213,9 @@ function approveData(spender: string, amount: string): string {
 }
 
 /**
- * Hyperliquid: one immediate-or-cancel order per leg, each signed in the wallet. Nothing is
- * broadcast on a chain; the exchange answers at once with what filled.
+ * Hyperliquid: one immediate-or-cancel order per leg, signed by this browser's API wallet once
+ * the user's wallet has approved it. Nothing is broadcast on a chain; the exchange answers at
+ * once with what filled.
  */
 async function executeHyperliquid(step: SwapStep, wallet: Wallet, quote: HyperliquidQuote, onPhase: (p: Phase) => void): Promise<string> {
   const provider = evmProviderFor(wallet);
@@ -218,6 +224,11 @@ async function executeHyperliquid(step: SwapStep, wallet: Wallet, quote: Hyperli
   const fresh = (await fetchQuote(step)) as HyperliquidQuote;
   if (fresh.minReceive < quote.minReceive * 0.99) throw new AppError("priceMoved");
 
+  const agent = loadOrCreateAgent(step.address);
+  if (!fresh.agentApproved) {
+    onPhase("approving");
+    await approveAgent(provider, step.address, agent);
+  }
   if (fresh.builder && !fresh.builder.approved) {
     onPhase("approving");
     await approveBuilderFee(provider, step.address, fresh.builder.address, fresh.builder.maxFeeRate);
@@ -232,7 +243,7 @@ async function executeHyperliquid(step: SwapStep, wallet: Wallet, quote: Hyperli
     const size = usdcFromPrevious == null ? leg.size : roundSize((usdcFromPrevious * (1 - 0.0007 - feeRate)) / Number(leg.limitPx), leg.szDecimals);
     if (size <= 0) throw new AppError("orderRejected", { error: "nothing left to buy after the first leg" });
     onPhase("signing");
-    const status = await placeOrder(provider, step.address, { a: leg.asset, b: leg.isBuy, p: leg.limitPx, s: floatToWire(size), r: false, t: { limit: { tif: "Ioc" } } }, builder);
+    const status = await placeOrder(agent, { a: leg.asset, b: leg.isBuy, p: leg.limitPx, s: floatToWire(size), r: false, t: { limit: { tif: "Ioc" } } }, builder);
     if (status.error) throw new AppError("orderRejected", { error: status.error });
     if (!status.filled) throw new AppError("orderRejected", { error: "the order did not fill" });
     last = status.filled;

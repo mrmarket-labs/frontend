@@ -195,7 +195,11 @@ export function ReviewSheet({ step, wallet, onClose, onDone }: {
 
         {d?.needsApproval && state === "ready" && (
           <p className="mt-3.5 text-meta leading-normal text-ink-2">
-            {step.chain === "hyperliquid" ? t.review.builderApprovalNote(`${d.feeBps / 100}%`) : t.review.approvalNote(fmt(step.sell.amount), step.sell.symbol)}
+            {step.chain !== "hyperliquid"
+              ? t.review.approvalNote(fmt(step.sell.amount), step.sell.symbol)
+              : [quote?.kind === "hyperliquid" && !quote.agentApproved && t.review.agentApprovalNote, d.feeBps > 0 && quote?.kind === "hyperliquid" && !quote.builder?.approved && t.review.builderApprovalNote(`${d.feeBps / 100}%`)]
+                  .filter(Boolean)
+                  .join(" ")}
           </p>
         )}
         {step.chain === "hyperliquid" && d && <p className="mt-2 text-meta leading-normal text-ink-3">{t.review.hyperliquidNote}</p>}

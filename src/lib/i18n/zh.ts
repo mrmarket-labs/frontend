@@ -357,7 +357,8 @@ export const zh: Dict = {
     noFee: "本笔免收",
     youAreBuying: (symbol: string) => `你正在买入 ${symbol}。`,
     approvalNote: (amount: string, symbol: string) => `钱包会先请求你授权恰好 ${amount} ${symbol} 给兑换合约，然后再确认兑换本身。`,
-    builderApprovalNote: (pct: string) => `钱包会先请求你一次性批准应用在 Hyperliquid 订单上收取 ${pct} 的费用。之后每笔订单只需一次签名。`,
+    agentApprovalNote: "钱包会先请求你一次性批准一个本浏览器专用的交易密钥。该密钥只能在 Hyperliquid 下单，不能做其他任何事，也永远无法提款。之后下单不再需要钱包确认。",
+    builderApprovalNote: (pct: string) => `钱包还会请求你一次性批准应用在 Hyperliquid 订单上收取 ${pct} 的费用。`,
     hyperliquidNote: "这是 Hyperliquid 现货上的立即成交否则取消订单。Hyperliquid 自身的吃单费另计；两种代币之间的兑换会通过 USDC 分两笔下单。",
     phases: {
       approving: "请在钱包中授权该代币…",
@@ -365,8 +366,8 @@ export const zh: Dict = {
       confirming: "已发送。持续重新广播，直到网络确认…",
     },
     hyperliquidPhases: {
-      approving: "请在钱包中批准费用…",
-      signing: "请在钱包中签名订单…",
+      approving: "请在钱包中批准…",
+      signing: "正在 Hyperliquid 下单…",
       confirming: "已成交。正在获取成交记录…",
     },
     cancelled: "你在钱包中取消了请求。",

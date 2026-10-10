@@ -47,7 +47,10 @@ export function localeFromRequest(request: Request): Locale {
 /** Translates a coded wallet-layer error; anything else is shown as it came. */
 export function errorMessage(e: unknown, t: Dict): string {
   if (e instanceof AppError) return t.errors[e.code](e.vars);
-  return e instanceof Error ? e.message : String(e);
+  if (e instanceof Error) return e.message;
+  // Wallets reject with plain objects ({ code, message }), not Error instances.
+  if (e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string") return (e as { message: string }).message;
+  return String(e);
 }
 
 export type ErrorCode = keyof Dict["errors"];
