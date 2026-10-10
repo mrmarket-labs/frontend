@@ -1,6 +1,5 @@
-import type { HyperliquidLeg } from "@/app/api/swap/hyperliquid/route";
 import { approveBuilderFee, fillHash, placeOrder, type OrderStatus } from "../hyperliquid/sign";
-import { floatToWire, roundSize } from "../hyperliquid/spot";
+import { floatToWire, roundSize, type HyperliquidLeg } from "../hyperliquid/spot";
 import { AppError } from "../i18n";
 import type { SwapStep } from "../plan";
 import { EVM_CHAIN_IDS, EVM_CHAIN_PARAMS, NATIVE, ZEROX_NATIVE, fromRawUnits, toRawUnits, type EvmExecChain } from "../tokens";

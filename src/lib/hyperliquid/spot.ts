@@ -42,6 +42,20 @@ export const HL_SPOT_TOKENS: SpotToken[] = [
   { symbol: "CRCLX", index: 857, szDecimals: 2, pairIndex: 714, pairName: "@714" },
 ];
 
+/** One order the client will sign: everything the wire format needs, plus what the user sees. */
+export interface HyperliquidLeg {
+  asset: number;
+  pairName: string;
+  isBuy: boolean;
+  /** Base token size, already rounded to the token's size decimals. */
+  size: number;
+  szDecimals: number;
+  limitPx: string;
+  expectedPx: number;
+  /** What this leg yields: USDC for a sell, base token for a buy. */
+  expectedOut: number;
+}
+
 export const hlAddress = (index: number) => `${HL_PREFIX}${index}`;
 
 export function hlIndexOf(address: string): number | null {

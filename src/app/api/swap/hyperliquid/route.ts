@@ -1,7 +1,7 @@
 import { z } from "zod/v4";
 import { FEE_BPS, HYPERLIQUID_BUILDER } from "@/lib/fees";
 import { approvedBuilderFee, getBook, getSpotTokens, type BookLevel, type SpotTokenMeta } from "@/lib/hyperliquid/meta";
-import { HL_MIN_ORDER_USD, HL_USDC_INDEX, SPOT_ASSET_BASE, floatToWire, hlIndexOf, roundPrice, roundSize } from "@/lib/hyperliquid/spot";
+import { HL_MIN_ORDER_USD, HL_USDC_INDEX, SPOT_ASSET_BASE, floatToWire, hlIndexOf, roundPrice, roundSize, type HyperliquidLeg } from "@/lib/hyperliquid/spot";
 import { dict, localeFromRequest } from "@/lib/i18n";
 import { clientIp, hit, tooMany } from "@/lib/limits";
 
@@ -16,20 +16,6 @@ const RequestSchema = z.object({
   amount: z.number().positive().finite(),
   user: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
 });
-
-/** One order the client will sign: everything the wire format needs, plus what the user sees. */
-export interface HyperliquidLeg {
-  asset: number;
-  pairName: string;
-  isBuy: boolean;
-  /** Base token size, already rounded to the token's size decimals. */
-  size: number;
-  szDecimals: number;
-  limitPx: string;
-  expectedPx: number;
-  /** What this leg yields: USDC for a sell, base token for a buy. */
-  expectedOut: number;
-}
 
 /** Walk one side of the book; returns the average price and how much base was matched. */
 function walk(levels: BookLevel[], want: { base?: number; quote?: number }): { avgPx: number; base: number } | null {
@@ -95,8 +81,10 @@ export async function POST(request: Request) {
       if (leg === "noLiquidity") return Response.json({ error: t.noLiquidity }, { status: 409 });
       legs.push(leg);
     }
-    const notional = legs[0].isBuy ? usdc : legs[0].expectedOut;
-    if (notional < HL_MIN_ORDER_USD) return Response.json({ error: t.orderTooSmall(HL_MIN_ORDER_USD) }, { status: 409 });
+    // Each order must clear the exchange's minimum after rounding to lot size, or it is rejected at signing.
+    const notionalOf = (leg: HyperliquidLeg) => (leg.isBuy ? leg.size * leg.expectedPx : leg.expectedOut);
+    if (legs.some((leg) => notionalOf(leg) < HL_MIN_ORDER_USD)) return Response.json({ error: t.orderTooSmall(HL_MIN_ORDER_USD) }, { status: 409 });
+    const notional = notionalOf(legs[0]);
 
     const last = legs[legs.length - 1];
     const bestPx = (leg: HyperliquidLeg, book: BookLevel[]) => book[0]?.px ?? leg.expectedPx;
