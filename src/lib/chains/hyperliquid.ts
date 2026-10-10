@@ -1,5 +1,6 @@
 import { canonicalAsset, classify } from "../classify";
 import { cached, getJson } from "../http";
+import { hlAddress } from "../hyperliquid/spot";
 import type { Holding, PerpPosition } from "../types";
 
 const INFO_URL = "https://api.hyperliquid.xyz/info";
@@ -22,7 +23,7 @@ export function info<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 interface SpotMeta {
-  tokens: { name: string; index: number; fullName: string | null }[];
+  tokens: { name: string; index: number; fullName: string | null; szDecimals: number }[];
   universe: { name: string; tokens: [number, number] }[];
 }
 interface SpotCtx {
@@ -52,25 +53,33 @@ interface DelegatorSummary {
   totalPendingWithdrawal: string;
 }
 
+export interface SpotQuote {
+  price: number;
+  volume: number;
+  name: string;
+  szDecimals: number;
+}
+
 /** USD mark price and daily volume per spot token index, from its /USDC pair. */
-export function spotPrices(): Promise<Map<number, { price: number; volume: number; name: string }>> {
+export function spotPrices(): Promise<Map<number, SpotQuote>> {
   return cached("hl-spot-prices", 60_000, async () => {
     const [meta, ctxs] = await info<[SpotMeta, SpotCtx[]]>({ type: "spotMetaAndAssetCtxs" });
     const ctxByPair = new Map(ctxs.map((c) => [c.coin, c]));
-    const names = new Map(meta.tokens.map((t) => [t.index, t.name]));
-    const prices = new Map<number, { price: number; volume: number; name: string }>();
-    prices.set(USDC_TOKEN, { price: 1, volume: Infinity, name: "USDC" });
+    const tokens = new Map(meta.tokens.map((t) => [t.index, t]));
+    const prices = new Map<number, SpotQuote>();
+    prices.set(USDC_TOKEN, { price: 1, volume: Infinity, name: "USDC", szDecimals: tokens.get(USDC_TOKEN)?.szDecimals ?? 8 });
     for (const pair of meta.universe) {
       const [base, quote] = pair.tokens;
       const ctx = ctxByPair.get(pair.name);
       if (quote !== USDC_TOKEN || !ctx) continue;
-      prices.set(base, { price: Number(ctx.markPx), volume: Number(ctx.dayNtlVlm), name: names.get(base) ?? pair.name });
+      prices.set(base, { price: Number(ctx.markPx), volume: Number(ctx.dayNtlVlm), name: tokens.get(base)?.name ?? pair.name, szDecimals: tokens.get(base)?.szDecimals ?? 0 });
     }
     return prices;
   });
 }
 
-function holding(address: string, symbol: string, name: string, amount: number, priceUsd: number): Holding {
+/** `spot` marks a balance the app can sell with a spot order; margin and staked coins carry no token. */
+function holding(address: string, symbol: string, name: string, amount: number, priceUsd: number, spot?: { index: number; szDecimals: number }): Holding {
   return {
     chain: "hyperliquid",
     address,
@@ -81,6 +90,7 @@ function holding(address: string, symbol: string, name: string, amount: number, 
     amount,
     priceUsd,
     valueUsd: amount * priceUsd,
+    ...(spot && { tokenAddress: hlAddress(spot.index), decimals: spot.szDecimals }),
   };
 }
 
@@ -116,7 +126,7 @@ export async function scanHyperliquid(address: string): Promise<HyperliquidScan>
     const amount = Number(b.total);
     const quote = prices.get(b.token);
     if (!amount || !quote) continue;
-    const h = holding(address, b.coin, b.token === USDC_TOKEN ? "USD Coin" : quote.name, amount, quote.price);
+    const h = holding(address, b.coin, b.token === USDC_TOKEN ? "USD Coin" : quote.name, amount, quote.price, { index: b.token, szDecimals: quote.szDecimals });
     if (h.valueUsd < MIN_VALUE_USD) continue;
     if (quote.volume < MIN_DAILY_VOLUME_USD) {
       ignored++;

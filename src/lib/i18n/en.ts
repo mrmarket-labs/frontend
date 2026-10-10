@@ -345,11 +345,11 @@ export const en = {
     sellTitle: (usd: string, symbol: string, chain: string) => `Sell ${usd} of ${symbol} on ${chain}`,
     sellBitcoin: "Send the BTC to an exchange or use a bridge. Native BTC swaps are coming soon.",
     sellRescan: "Rescan the portfolio to enable the in-app swap for this position.",
-    sellHyperliquid: "Place the order on Hyperliquid directly. In-app Hyperliquid execution is next on the roadmap.",
+    sellHyperliquid: "This balance is perps margin or staked HYPE, which a spot order can't sell. Move it to spot on Hyperliquid, then rescan.",
     buyTitle: (usd: string, instrument: string, venue: string | null) => `Buy ${usd} of ${instrument}${venue ? ` on ${venue}` : ""}`,
     buyPerp: (instrument: string) => `Open a 1x long on ${instrument} with USDC on Hyperliquid. The position pays funding; in-app execution is coming next.`,
     buySpot: (instrument: string) =>
-      `Deposit USDC to Hyperliquid (bridging from Arbitrum is cheapest) and place a spot order for ${instrument}. In-app execution is coming next.`,
+      `${instrument} isn't in the app's Hyperliquid list yet. Deposit USDC to Hyperliquid (bridging from Arbitrum is cheapest) and place the spot order there.`,
     buyBitcoin: "Buy BTC on an exchange or via a bridge and withdraw to your Bitcoin address. Native BTC swaps are coming soon.",
     buyUnlisted: (instrument: string) => `${instrument} isn't in the app's token list yet, so this one is manual for now.`,
     addStableTitle: (usd: string, asset: string) => `Add ${usd} of ${asset}`,
@@ -380,10 +380,17 @@ export const en = {
     noFee: "none on this trade",
     youAreBuying: (symbol: string) => `You are buying ${symbol}.`,
     approvalNote: (amount: string, symbol: string) => `Your wallet will first ask to approve exactly ${amount} ${symbol} for the swap contract, then the swap itself.`,
+    builderApprovalNote: (pct: string) => `Your wallet will first ask you to approve the app's ${pct} fee on Hyperliquid orders, once. After that, each order is one signature.`,
+    hyperliquidNote: "An immediate-or-cancel order on Hyperliquid spot. Hyperliquid's own taker fee applies; a swap between two tokens is two orders through USDC.",
     phases: {
       approving: "Approve the token in your wallet…",
       signing: "Confirm the swap in your wallet…",
       confirming: "Sent. Rebroadcasting until the network confirms it…",
+    },
+    hyperliquidPhases: {
+      approving: "Approve the fee in your wallet…",
+      signing: "Sign the order in your wallet…",
+      confirming: "Filled. Fetching the fill record…",
     },
     cancelled: "You cancelled the request in your wallet.",
     viewOnExplorer: "View on explorer ↗",
@@ -453,6 +460,7 @@ export const en = {
     txReverted: () => "Transaction reverted on-chain.",
     txUnconfirmedEvm: () => "Not confirmed after 3 minutes. Check the explorer link before retrying.",
     priceMoved: () => "The price moved more than 1% since this quote. Review the new quote and try again.",
+    orderRejected: (v: Record<string, string>) => `Hyperliquid did not fill the order: ${v.error}`,
   },
 
   /** Server responses. Routes pick the language from the locale cookie. */
@@ -488,6 +496,7 @@ export const en = {
     noLiquidity: "No liquidity for this pair right now.",
     insufficientBalance: "The wallet doesn't hold enough of the token to sell.",
     couldNotQuote: "Could not get a quote.",
+    orderTooSmall: (usd: number) => `Hyperliquid orders must be worth at least $${usd}.`,
     swapWouldFail: (reason: string) => `Swap would fail: ${reason}`,
     invalidTransaction: "Invalid transaction.",
     couldNotSend: "Could not send the transaction.",

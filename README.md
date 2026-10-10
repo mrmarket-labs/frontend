@@ -37,15 +37,19 @@ DEX liquidity are skipped as likely spam.
 
 ## Swaps and fees
 
-Phase 1 executes **same-chain swaps on Solana (Jupiter) and Ethereum/L2s (0x)**. Everything else (Bitcoin,
-Hyperliquid, bridges) appears in the plan as a manual step. The app never holds funds: every swap is a
-transaction the user signs in their own wallet.
+The app executes **same-chain swaps on Solana (Jupiter) and Ethereum/L2s (0x)** and **spot orders on
+Hyperliquid** (immediate-or-cancel, signed as EIP-712 typed data in the user's EVM wallet, no network switch).
+Everything else (Bitcoin, Hyperliquid perps, bridges) appears in the plan as a manual step. The app never holds
+funds: every swap is a transaction or order the user signs in their own wallet.
 
 - `SWAP_FEE_BPS` (default 50 = 0.5%) is charged via the aggregators' integrator-fee features.
 - `FEE_WALLET_EVM` receives 0x fees in the sold token. `FEE_WALLET_SOLANA` receives Jupiter fees, but only
   into token accounts that already exist: create (W)SOL and USDC token accounts in that wallet, or the fee is
   skipped on that trade.
 - `ZEROX_API_KEY` is required for EVM swaps (free at dashboard.0x.org). Without it EVM steps show an error.
+- `HYPERLIQUID_BUILDER` collects the fee on Hyperliquid orders through its builder-fee mechanism: the user
+  approves the rate once with a signature, then each order carries it. Leave it unset to charge no fee there;
+  Hyperliquid only pays builders whose account holds at least 100 USDC and rejects orders naming any other.
 
 ## Abuse protection
 

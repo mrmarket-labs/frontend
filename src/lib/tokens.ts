@@ -1,15 +1,16 @@
 import { EVM_CHAINS } from "./chains/evm";
+import { hlTokenInfo } from "./hyperliquid/spot";
 import type { Chain } from "./types";
 
-/** Chains where the app can execute swaps itself (Phase 1: Jupiter on Solana, 0x on EVM). */
+/** Chains where the app can execute itself: Jupiter on Solana, 0x on EVM, spot orders on Hyperliquid. */
 export type EvmExecChain = "ethereum" | "base" | "arbitrum" | "optimism" | "polygon";
-export type ExecChain = "solana" | EvmExecChain;
+export type ExecChain = "solana" | "hyperliquid" | EvmExecChain;
 
 export const EVM_EXEC_CHAINS: EvmExecChain[] = ["ethereum", "base", "arbitrum", "optimism", "polygon"];
 export const L2_CHAINS: EvmExecChain[] = ["arbitrum", "base", "optimism", "polygon"];
 
 export function isExecChain(chain: Chain): chain is ExecChain {
-  return chain === "solana" || (EVM_EXEC_CHAINS as Chain[]).includes(chain);
+  return chain === "solana" || chain === "hyperliquid" || (EVM_EXEC_CHAINS as Chain[]).includes(chain);
 }
 
 /** Marker address for a chain's native coin (ETH, POL). 0x uses its own sentinel, see below. */
@@ -18,7 +19,7 @@ export const ZEROX_NATIVE = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
 export interface TokenInfo {
   symbol: string;
-  /** Mint on Solana; contract address or NATIVE on EVM. */
+  /** Mint on Solana; contract address or NATIVE on EVM; "hl:<token index>" on Hyperliquid. */
   address: string;
   decimals: number;
 }
@@ -67,8 +68,9 @@ const EVM_TOKENS: Record<EvmExecChain, TokenInfo[]> = Object.fromEntries(
 const INSTRUMENT_ALIASES: Record<string, string> = { WSOL: "SOL", "USD COIN": "USDC" };
 
 export function resolveToken(chain: ExecChain, symbol: string): TokenInfo | null {
-  const list = chain === "solana" ? SOLANA_TOKENS : EVM_TOKENS[chain];
   const wanted = (INSTRUMENT_ALIASES[symbol.toUpperCase()] ?? symbol).toUpperCase();
+  if (chain === "hyperliquid") return hlTokenInfo(wanted);
+  const list = chain === "solana" ? SOLANA_TOKENS : EVM_TOKENS[chain];
   return list.find((t) => t.symbol.toUpperCase() === wanted) ?? null;
 }
 
@@ -83,6 +85,7 @@ export const EVM_CHAIN_IDS: Record<EvmExecChain, number> = {
 /** Native coin to leave behind so the wallet can still pay for transactions. */
 export const GAS_RESERVE: Record<ExecChain, number> = {
   solana: 0.02,
+  hyperliquid: 0,
   ethereum: 0.004,
   base: 0.0005,
   arbitrum: 0.0005,
@@ -92,6 +95,7 @@ export const GAS_RESERVE: Record<ExecChain, number> = {
 
 export const EXPLORER_TX: Record<ExecChain, string> = {
   solana: "https://solscan.io/tx/",
+  hyperliquid: "https://app.hyperliquid.xyz/explorer/tx/",
   ethereum: "https://etherscan.io/tx/",
   base: "https://basescan.org/tx/",
   arbitrum: "https://arbiscan.io/tx/",
