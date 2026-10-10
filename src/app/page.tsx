@@ -180,7 +180,7 @@ export default function Home() {
     setSigningIn(true);
     setSignInError(null);
     try {
-      setSession(await signIn(wallet));
+      setSession(await signIn(wallet, portfolio?.holdings ?? []));
     } catch (e) {
       const msg = errorMessage(e, t);
       setSignInError(/reject|denied|cancel/i.test(msg) ? t.analyze.signatureCancelled : msg);

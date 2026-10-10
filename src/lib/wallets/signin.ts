@@ -1,6 +1,7 @@
 import { AppError } from "../i18n";
+import type { Holding } from "../types";
 import { getWallet } from "./registry";
-import type { Wallet, WalletAddress } from "./types";
+import { sameAddress, type Wallet, type WalletAddress } from "./types";
 
 export interface SessionInfo {
   address: string;
@@ -30,10 +31,16 @@ function buildMessage(address: string, nonce: string, issuedAt: string): string 
   ].join("\n");
 }
 
-/** Pick the address a connected wallet can sign with: its Solana account if it has one, otherwise EVM. */
-export function signableAddress(wallet: Wallet): WalletAddress | null {
+/**
+ * Pick the address a connected wallet signs in with. The server only accepts a signer that holds
+ * funds, so prefer the account the scanned money is in: a MetaMask with an empty Solana account
+ * and a funded Ethereum one must sign with the latter. Solana first on a tie or with no scan.
+ */
+export function signableAddress(wallet: Wallet, holdings: Holding[] = []): WalletAddress | null {
   if (wallet.mode !== "connected") return null;
-  return wallet.addresses.find((a) => a.kind === "solana") ?? wallet.addresses.find((a) => a.kind === "evm") ?? null;
+  const candidates = wallet.addresses.filter((a) => a.kind === "solana" || a.kind === "evm");
+  const valueOf = (a: WalletAddress) => holdings.filter((h) => sameAddress(h.address, a.address)).reduce((s, h) => s + h.valueUsd, 0);
+  return [...candidates].sort((a, b) => valueOf(b) - valueOf(a) || (a.kind === "solana" ? -1 : 1))[0] ?? null;
 }
 
 export async function getSession(): Promise<SessionInfo | null> {
@@ -45,8 +52,8 @@ export async function signOut(): Promise<void> {
   await fetch("/api/auth/session", { method: "DELETE" });
 }
 
-export async function signIn(wallet: Wallet): Promise<SessionInfo> {
-  const target = signableAddress(wallet);
+export async function signIn(wallet: Wallet, holdings: Holding[] = []): Promise<SessionInfo> {
+  const target = signableAddress(wallet, holdings);
   if (!target) throw new AppError("connectFirst");
   const { nonce, issuedAt } = await api<{ nonce: string; issuedAt: string }>("/api/auth/nonce");
   const message = buildMessage(target.address, nonce, issuedAt);
