@@ -4,6 +4,12 @@ import { cached, rpc } from "./http";
 export const FEE_BPS = Number(process.env.SWAP_FEE_BPS || 50);
 export const FEE_WALLET_SOLANA = process.env.FEE_WALLET_SOLANA || "";
 export const FEE_WALLET_EVM = process.env.FEE_WALLET_EVM || "";
+/**
+ * Address that collects the fee on Hyperliquid orders through its builder-fee mechanism. Unset
+ * means no fee there: Hyperliquid only pays builders whose own account holds at least 100 USDC,
+ * and an order naming an ineligible builder is rejected outright.
+ */
+export const HYPERLIQUID_BUILDER = process.env.HYPERLIQUID_BUILDER || "";
 
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 

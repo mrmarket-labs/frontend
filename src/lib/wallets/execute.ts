@@ -1,3 +1,6 @@
+import type { HyperliquidLeg } from "@/app/api/swap/hyperliquid/route";
+import { approveBuilderFee, fillHash, placeOrder, type OrderStatus } from "../hyperliquid/sign";
+import { floatToWire, roundSize } from "../hyperliquid/spot";
 import { AppError } from "../i18n";
 import type { SwapStep } from "../plan";
 import { EVM_CHAIN_IDS, EVM_CHAIN_PARAMS, NATIVE, ZEROX_NATIVE, fromRawUnits, toRawUnits, type EvmExecChain } from "../tokens";
@@ -31,7 +34,19 @@ export interface EvmQuote {
   transaction: { to: string; data: string; value: string; gas: string | null; gasPrice: string };
 }
 
-export type Quote = SolanaQuote | EvmQuote;
+export interface HyperliquidQuote {
+  kind: "hyperliquid";
+  legs: HyperliquidLeg[];
+  receive: number;
+  minReceive: number;
+  priceImpactPct: number;
+  feeBps: number;
+  feeUsd: number;
+  route: string[];
+  builder: { address: string; feeTenthsBp: number; maxFeeRate: string; approved: boolean } | null;
+}
+
+export type Quote = SolanaQuote | EvmQuote | HyperliquidQuote;
 export type Phase = "approving" | "signing" | "confirming";
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -46,6 +61,14 @@ export function sellAmountRaw(step: SwapStep): string {
 }
 
 export async function fetchQuote(step: SwapStep): Promise<Quote> {
+  if (step.chain === "hyperliquid") {
+    const q = await api<Omit<HyperliquidQuote, "kind">>("/api/swap/hyperliquid", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sellToken: step.sell.token.address, buyToken: step.buy.token.address, amount: step.sell.amount, user: step.address }),
+    });
+    return { kind: "hyperliquid", ...q };
+  }
   if (step.chain === "solana") {
     const q = await api<Omit<SolanaQuote, "kind">>("/api/swap/solana", {
       method: "POST",
@@ -73,6 +96,20 @@ export async function fetchQuote(step: SwapStep): Promise<Quote> {
 
 /** Human-readable numbers for the review sheet. */
 export function describeQuote(step: SwapStep, quote: Quote) {
+  if (quote.kind === "hyperliquid")
+    return {
+      // A sell is sized to the token's lot size; what is paid is that size, not the plan's fraction.
+      pay: quote.legs[0].isBuy ? step.sell.amount : quote.legs[0].size,
+      receive: quote.receive,
+      minReceive: quote.minReceive,
+      feeBps: quote.feeBps,
+      feeUsd: quote.feeUsd,
+      priceImpactPct: quote.priceImpactPct,
+      networkFeeUsd: null,
+      route: quote.route,
+      // A one-time signature lets the exchange pay the app's fee out of the order.
+      needsApproval: quote.builder != null && !quote.builder.approved,
+    };
   const out = fromRawUnits(quote.kind === "solana" ? quote.outAmount : quote.buyAmount, step.buy.token.decimals);
   const minOut = fromRawUnits(quote.kind === "solana" ? quote.minOutAmount : quote.minBuyAmount, step.buy.token.decimals);
   const sellPrice = step.sell.usd / step.sell.amount;
@@ -171,6 +208,41 @@ function approveData(spender: string, amount: string): string {
   return `0x095ea7b3${pad(spender)}${pad(BigInt(amount).toString(16))}`;
 }
 
+/**
+ * Hyperliquid: one immediate-or-cancel order per leg, each signed in the wallet. Nothing is
+ * broadcast on a chain; the exchange answers at once with what filled.
+ */
+async function executeHyperliquid(step: SwapStep, wallet: Wallet, quote: HyperliquidQuote, onPhase: (p: Phase) => void): Promise<string> {
+  const provider = evmProviderFor(wallet);
+  await ensureEvmAccount(provider, step.address);
+  // Books move; price the orders off the book as it is right before signing.
+  const fresh = (await fetchQuote(step)) as HyperliquidQuote;
+  if (fresh.minReceive < quote.minReceive * 0.99) throw new AppError("priceMoved");
+
+  if (fresh.builder && !fresh.builder.approved) {
+    onPhase("approving");
+    await approveBuilderFee(provider, step.address, fresh.builder.address, fresh.builder.maxFeeRate);
+  }
+  const builder = fresh.builder ? { b: fresh.builder.address, f: fresh.builder.feeTenthsBp } : null;
+  const feeRate = fresh.builder ? fresh.builder.feeTenthsBp / 100_000 : 0;
+
+  let usdcFromPrevious: number | null = null;
+  let last: OrderStatus["filled"] | undefined;
+  for (const leg of fresh.legs) {
+    // The second leg spends what the first actually brought in, net of the exchange's and the app's fees.
+    const size = usdcFromPrevious == null ? leg.size : roundSize((usdcFromPrevious * (1 - 0.0007 - feeRate)) / Number(leg.limitPx), leg.szDecimals);
+    if (size <= 0) throw new AppError("orderRejected", { error: "nothing left to buy after the first leg" });
+    onPhase("signing");
+    const status = await placeOrder(provider, step.address, { a: leg.asset, b: leg.isBuy, p: leg.limitPx, s: floatToWire(size), r: false, t: { limit: { tif: "Ioc" } } }, builder);
+    if (status.error) throw new AppError("orderRejected", { error: status.error });
+    if (!status.filled) throw new AppError("orderRejected", { error: "the order did not fill" });
+    last = status.filled;
+    usdcFromPrevious = leg.isBuy ? null : Number(status.filled.totalSz) * Number(status.filled.avgPx);
+  }
+  onPhase("confirming");
+  return (await fillHash(step.address, last!.oid)) ?? String(last!.oid);
+}
+
 export async function executeStep(
   step: SwapStep,
   wallet: Wallet,
@@ -178,6 +250,7 @@ export async function executeStep(
   onPhase: (p: Phase) => void,
   onSent: (txId: string) => void = () => undefined,
 ): Promise<string> {
+  if (quote.kind === "hyperliquid") return executeHyperliquid(step, wallet, quote, onPhase);
   if (quote.kind === "solana") {
     const solana = getWallet(wallet.provider)?.solana;
     if (!solana) throw new AppError("unavailable", { name: wallet.label });

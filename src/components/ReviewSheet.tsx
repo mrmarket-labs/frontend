@@ -194,12 +194,15 @@ export function ReviewSheet({ step, wallet, onClose, onDone }: {
         )}
 
         {d?.needsApproval && state === "ready" && (
-          <p className="mt-3.5 text-meta leading-normal text-ink-2">{t.review.approvalNote(fmt(step.sell.amount), step.sell.symbol)}</p>
+          <p className="mt-3.5 text-meta leading-normal text-ink-2">
+            {step.chain === "hyperliquid" ? t.review.builderApprovalNote(`${d.feeBps / 100}%`) : t.review.approvalNote(fmt(step.sell.amount), step.sell.symbol)}
+          </p>
         )}
+        {step.chain === "hyperliquid" && d && <p className="mt-2 text-meta leading-normal text-ink-3">{t.review.hyperliquidNote}</p>}
         {error && <p className="mt-3.5 text-body leading-normal text-risk">{error}</p>}
         {busy && (
           <p className="mt-3.5 flex items-center gap-2 text-body text-ink-2">
-            <Spinner /> <span className="min-w-0 flex-1">{t.review.phases[state as Phase]}</span>
+            <Spinner /> <span className="min-w-0 flex-1">{step.chain === "hyperliquid" ? t.review.hyperliquidPhases[state as Phase] : t.review.phases[state as Phase]}</span>
             {explorer && state === "confirming" && (
               <a href={explorer} target="_blank" rel="noreferrer" className={`flex-none text-meta ${link}`}>
                 {t.review.viewOnExplorer}

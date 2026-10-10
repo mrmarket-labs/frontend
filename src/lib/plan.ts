@@ -133,7 +133,8 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
           address: h.address,
           where: CHAIN_LABELS[h.chain],
           title: s.sellTitle(usd0(usd), h.symbol, CHAIN_LABELS[h.chain]),
-          detail: h.chain === "bitcoin" ? s.sellBitcoin : isExecChain(h.chain) ? s.sellRescan : s.sellHyperliquid,
+          // On Hyperliquid only spot balances can be sold; perps margin and staked HYPE stay manual.
+          detail: h.chain === "bitcoin" ? s.sellBitcoin : h.chain === "hyperliquid" ? s.sellHyperliquid : s.sellRescan,
           usd,
           move: { action: "sell", asset: h.asset },
         });
@@ -148,6 +149,7 @@ export function compilePlan(holdings: Holding[], trades: Trade[], t: Dict): Step
     const instrument = t.instrument ?? t.asset;
     let chain: ExecChain | null = null;
     if (venue === "solana") chain = "solana";
+    else if (venue === "hyperliquid-spot") chain = "hyperliquid";
     else if (venue === "ethereum") chain = "ethereum";
     else if (venue === "ethereum-l2") chain = [...L2_CHAINS].sort((a, b) => sellUsdOn(b) - sellUsdOn(a))[0];
     const token = chain ? (resolveToken(chain, instrument) ?? resolveToken(chain, t.asset)) : null;
