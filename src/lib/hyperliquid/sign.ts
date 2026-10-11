@@ -12,8 +12,8 @@ import type { Eip1193Provider } from "../wallets/types";
 
 export const HL_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
 export const HL_INFO_URL = "https://api.hyperliquid.xyz/info";
-/** Name the approved API wallet carries on Hyperliquid, so the user can recognise and revoke it. */
-export const AGENT_NAME = "investlikebuffett";
+/** Name the approved API wallet carries on Hyperliquid (at most 16 characters), so the user can recognise and revoke it. */
+export const AGENT_NAME = "investbuffett";
 
 type Packable = null | boolean | number | string | Packable[] | { [key: string]: Packable };
 
