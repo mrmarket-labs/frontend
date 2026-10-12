@@ -494,6 +494,7 @@ export const zh: Dict = {
     advisorError: (message: string) => `分析服务错误：${message}`,
     globalLimit: "分析已达到今日全局上限，将于 UTC 午夜重置。",
     walletLimit: (n: number) => `此钱包已用完今日 ${n} 次分析，明天再来。`,
+    testRunsUsed: (n: number) => `此钱包已用完 ${n} 次试用分析。加入候补名单，Pro 分析开放时通知你。`,
     ipLimit: (minutes: number) => `来自你网络的分析请求过多。请 ${minutes} 分钟后重试。`,
     badApiKey: "分析服务的 ANTHROPIC_API_KEY 缺失或无效。",
     claudeRateLimited: "Claude API 限流中，请一分钟后重试。",

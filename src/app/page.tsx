@@ -62,6 +62,8 @@ export default function Home() {
   const [allowPerps, setAllowPerps] = useState(false);
   const [advising, setAdvising] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
+  /** The wallet has used all its test analyses; the analyze page points to the waitlist instead. */
+  const [testRunsUsed, setTestRunsUsed] = useState(false);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [waitlistSent, setWaitlistSent] = useState<string | null>(null);
 
@@ -197,6 +199,7 @@ export default function Home() {
     if (!portfolio) return;
     setAdvising(true);
     setAdviceError(null);
+    setTestRunsUsed(false);
     try {
       // Outside amounts are stated in euros or coins; fix them in dollars now, with fresh rates if needed.
       const rates = outside.length > 0 ? (fx ?? (await loadFx())) : {};
@@ -227,6 +230,7 @@ export default function Home() {
       go("verdict");
     } catch (e) {
       if (e instanceof ApiError && e.code === "auth") setSession(null);
+      setTestRunsUsed(e instanceof ApiError && e.code === "used");
       setAdviceError(errorMessage(e, t));
     } finally {
       setAdvising(false);
@@ -352,6 +356,7 @@ export default function Home() {
             canAdvise={portfolio.holdings.length > 0}
             advising={advising}
             adviceError={adviceError}
+            onWaitlist={testRunsUsed && !waitlistSent ? () => go("feedback") : undefined}
             onAdvise={advise}
           />
         )}

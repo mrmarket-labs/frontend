@@ -84,7 +84,16 @@ export async function cacheDelete(key: string): Promise<void> {
 
 /* --- Durable records (no expiry) ------------------------------------------------------- */
 
-const FOREVER = 10 * 365 * 24 * 3600;
+export const FOREVER = 10 * 365 * 24 * 3600;
+
+/** Give back a hit that didn't get its money's worth (the work it paid for failed). */
+export async function unhit(key: string): Promise<void> {
+  if (hasDurableStore) await redis("DECR", key);
+  else {
+    const existing = memory.get(key);
+    if (existing) existing.value = String(Math.max(0, Number(existing.value) - 1));
+  }
+}
 
 export async function recordGet<T>(key: string): Promise<T | null> {
   return cacheGet<T>(key);

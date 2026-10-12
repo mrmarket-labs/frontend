@@ -520,6 +520,7 @@ export const en = {
     advisorError: (message: string) => `Advisor service error: ${message}`,
     globalLimit: "The advisor has reached today's global limit. It resets at midnight UTC.",
     walletLimit: (n: number) => `This wallet has used today's ${n} analyses. More tomorrow.`,
+    testRunsUsed: (n: number) => `This wallet has used its ${n} test analyses. Join the waitlist to hear when Pro analysis opens.`,
     ipLimit: (minutes: number) => `Too many analyses from your network. Try again in ${minutes} min.`,
     badApiKey: "The advisor service has a missing or invalid ANTHROPIC_API_KEY.",
     claudeRateLimited: "Rate limited by the Claude API. Try again in a minute.",
