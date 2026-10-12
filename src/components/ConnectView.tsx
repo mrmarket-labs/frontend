@@ -9,6 +9,7 @@ import { sameAddress, shortAddress } from "@/lib/wallets/types";
 import { MOBILE_WALLETS, openInWallet } from "@/lib/wallets/mobile";
 import { chainsOf, type DiscoveredWallet } from "@/lib/wallets/registry";
 import { WALLETCONNECT_KEY } from "@/lib/wallets/walletconnect";
+import { track } from "@/lib/analytics";
 import type { WalletsApi } from "@/lib/wallets/useWallets";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { BTN_PRIMARY, BTN_TONAL, SectionLabel, Spinner, WalletMark, usd } from "./ui";
@@ -139,6 +140,7 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
     setConnectHint(null);
     try {
       const added = await api.connect(key);
+      track("wallet_connected", { wallet: key });
       // Newer Phantom builds no longer hand out Bitcoin addresses to websites.
       if (key === "phantom" && added.some((a) => a.kind === "solana") && !added.some((a) => a.kind === "bitcoin")) {
         setConnectHint(t.connect.phantomBtcHint(name));
@@ -158,6 +160,7 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
     const rejected = api.addWatched(watchText, t.connect.watchedLabel);
     if (rejected.length) return setWatchError(t.connect.notRecognized(rejected.map(shortAddress).join(", ")));
     setWatchError(null);
+    track("address_watched");
     setWatchText("");
     setPanel(null);
     onWalletsChanged();
