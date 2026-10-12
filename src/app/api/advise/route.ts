@@ -1,6 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
-import { AdviceError, PROMPT_VERSION, generateAdvice } from "@/lib/advisor";
+import { AdviceError, advisorConfigured, getPromptVersion, requestAdvice } from "@/lib/advisor";
 import { CATEGORY_LABELS } from "@/lib/classify";
 import { dict, localeFromRequest } from "@/lib/i18n";
 import { getMarketSnapshot } from "@/lib/market";
@@ -9,7 +8,6 @@ import { getPersona } from "@/lib/personas";
 import { readSession } from "@/lib/auth";
 import { cacheGet, cacheSet, clientIp, hit, today, tooMany } from "@/lib/limits";
 import { MAX_NOTE_LENGTH, MAX_OUTSIDE, OUTSIDE_KINDS, UNITS, type OutsidePriced } from "@/lib/outside";
-import { getHyperliquidVenues } from "@/lib/venues";
 import { computeTrades } from "@/lib/rebalance";
 import type { Category } from "@/lib/types";
 
@@ -17,16 +15,17 @@ export const maxDuration = 300;
 
 const ADVICE_PER_HOUR = Number(process.env.ADVICE_PER_HOUR || 10);
 const ADVICE_PER_WALLET_DAY = Number(process.env.ADVICE_PER_WALLET_DAY || 10);
-/** Hard ceiling on daily Claude spend, whatever an attacker does. */
+/** Hard ceiling on daily advisor spend, whatever an attacker does. */
 const ADVICE_DAILY_CAP = Number(process.env.ADVICE_DAILY_CAP || 300);
 const CACHE_TTL_SEC = 3600;
 
-/** Same portfolio shape + same question + same market regime → same answer; don't pay twice. */
+/** Same portfolio shape + same question + same market regime + same prompt → same answer; don't pay twice. */
 async function adviceCacheKey(
   holdings: { asset: string; valueUsd: number }[],
   outside: OutsidePriced[],
   params: Record<string, unknown>,
   regime: string,
+  promptVersion: number | "unknown",
 ): Promise<string> {
   const total = holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
   const byAsset = new Map<string, number>();
@@ -39,7 +38,7 @@ async function adviceCacheKey(
   const byKind = new Map<string, number>();
   for (const h of outside) byKind.set(h.kind, (byKind.get(h.kind) ?? 0) + h.valueUsd);
   const outsideShape = [...byKind.entries()].map(([k, v]) => [k, Math.round((v / total) * 10)] as const).sort();
-  const fingerprint = JSON.stringify({ v: PROMPT_VERSION, shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime });
+  const fingerprint = JSON.stringify({ v: promptVersion, shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
   return `advcache:${Buffer.from(digest).toString("hex").slice(0, 32)}`;
 }
@@ -99,6 +98,22 @@ const RequestSchema = z.object({
     .default([]),
 });
 
+/** HTTP status for each advisor failure; the message comes from the user's dictionary. */
+function statusFor(code: AdviceError["code"]): number {
+  switch (code) {
+    case "invalidRequest":
+    case "unknownPersona":
+      return 400;
+    case "claudeRateLimited":
+      return 429;
+    case "advisorNotConfigured":
+    case "badApiKey":
+      return 500;
+    default:
+      return 502;
+  }
+}
+
 export async function POST(request: Request) {
   const locale = localeFromRequest(request);
   const t = dict(locale).api;
@@ -108,16 +123,14 @@ export async function POST(request: Request) {
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: t.invalidRequest }, { status: 400 });
   const { personaId, risk, horizon, allowPerps, holdings, positions, outside } = parsed.data;
-  const persona = getPersona(personaId);
-  if (!persona) return Response.json({ error: t.unknownPersona }, { status: 400 });
+  if (!getPersona(personaId)) return Response.json({ error: t.unknownPersona }, { status: 400 });
 
-  if (!process.env.ANTHROPIC_API_KEY)
-    return Response.json({ error: t.noApiKey }, { status: 500 });
+  if (!advisorConfigured) return Response.json({ error: t.advisorNotConfigured }, { status: 500 });
 
   try {
-    const [market, venues] = await Promise.all([getMarketSnapshot(), getHyperliquidVenues()]);
-    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, horizon, allowPerps, locale }, market.regime);
-    const cached = await cacheGet<Awaited<ReturnType<typeof generateAdvice>>>(cacheKey);
+    const [market, promptVersion] = await Promise.all([getMarketSnapshot(), getPromptVersion()]);
+    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, horizon, allowPerps, locale }, market.regime, promptVersion);
+    const cached = await cacheGet<Awaited<ReturnType<typeof requestAdvice>>>(cacheKey);
     if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), market, cached: true });
 
     // Only uncached requests spend money, so only they count against the limits.
@@ -132,14 +145,15 @@ export async function POST(request: Request) {
     if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
     if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
 
-    const advice = await generateAdvice({ holdings, positions, outside, persona, risk, horizon, allowPerps, market, venues, locale });
+    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, horizon, allowPerps, market, locale });
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {
-    if (e instanceof AdviceError) return Response.json({ error: t[e.code] }, { status: 502 });
-    if (e instanceof Anthropic.AuthenticationError) return Response.json({ error: t.badApiKey }, { status: 500 });
-    if (e instanceof Anthropic.RateLimitError) return Response.json({ error: t.claudeRateLimited }, { status: 429 });
-    if (e instanceof Anthropic.APIError) return Response.json({ error: t.claudeError(e.message) }, { status: 502 });
+    if (e instanceof AdviceError) {
+      const message =
+        e.code === "claudeError" ? t.claudeError(e.message) : e.code === "advisorError" ? t.advisorError(e.message) : t[e.code];
+      return Response.json({ error: message }, { status: statusFor(e.code) });
+    }
     return Response.json({ error: e instanceof Error ? e.message : t.somethingWrong }, { status: 500 });
   }
 }
