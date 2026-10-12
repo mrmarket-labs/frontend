@@ -60,6 +60,8 @@ export interface AdviceRequest {
   allowPerps: boolean;
   /** Language for every free-text field; tickers and venue ids stay as given. */
   locale: Locale;
+  /** `test` runs the lighter public model; `pro` is the full one, not open yet. */
+  tier: "test" | "pro";
 }
 
 /** Codes the advise route maps to the user's language. The first eight are the advisor's own; the last two are ours. */

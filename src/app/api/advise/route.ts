@@ -17,6 +17,8 @@ const ADVICE_PER_WALLET_DAY = Number(process.env.ADVICE_PER_WALLET_DAY || 10);
 /** Hard ceiling on daily advisor spend, whatever an attacker does. */
 const ADVICE_DAILY_CAP = Number(process.env.ADVICE_DAILY_CAP || 300);
 const CACHE_TTL_SEC = 3600;
+/** Everyone gets the test tier until Pro opens; the advisor picks the model from it. */
+const TIER = "test" as const;
 
 /** Same portfolio shape + same question + same market regime + same prompt → same answer; don't pay twice. */
 
@@ -128,7 +130,7 @@ export async function POST(request: Request) {
 
   try {
     const probe = await probeAdvisor();
-    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, cadence, allowPerps, locale }, probe);
+    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, cadence, allowPerps, locale, tier: TIER }, probe);
     const cached = await cacheGet<Awaited<ReturnType<typeof requestAdvice>>>(cacheKey);
     if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), cached: true });
 
@@ -144,7 +146,7 @@ export async function POST(request: Request) {
     if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
     if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
 
-    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, locale });
+    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, locale, tier: TIER });
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice) });
   } catch (e) {

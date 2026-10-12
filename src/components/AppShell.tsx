@@ -72,6 +72,9 @@ function WalletPill({ wallets, onClick }: { wallets: Wallet[]; onClick: () => vo
  * The app frame. Mobile: a title bar with the wallet pill and a fixed bottom tab bar.
  * Desktop: a left sidebar that lists the wallets in full. Same tabs, different bones.
  */
+/** Signals are not open yet: the tab stays out of the navigation until they are. */
+const SHOWN_TABS = TABS.filter((tab) => tab.id !== "signals");
+
 export function AppShell({ tab, title, wallets, holdings, onTab, onWallets, mobileAction, mobileBar, hideTabs = false, children }: {
   tab: Tab;
   /** Mobile top-bar title. */
@@ -97,7 +100,7 @@ export function AppShell({ tab, title, wallets, holdings, onTab, onWallets, mobi
         <span className="pl-2.5 font-display text-[21px]">{t.common.appName}</span>
 
         <nav className="flex flex-col gap-[3px]" aria-label={t.shell.mainNav}>
-          {TABS.map((item) => (
+          {SHOWN_TABS.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -155,7 +158,7 @@ export function AppShell({ tab, title, wallets, holdings, onTab, onWallets, mobi
 
       {!hideTabs && (
         <nav aria-label={t.shell.mainNav} className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 bg-ground pt-2 pb-[max(16px,env(safe-area-inset-bottom))] lg:hidden">
-          {TABS.map((item) => (
+          {SHOWN_TABS.map((item) => (
             <button
               key={item.id}
               type="button"

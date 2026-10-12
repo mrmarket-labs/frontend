@@ -6,12 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "waitlist:export": "node scripts/export-waitlist.mts"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "@solana/web3.js": "^1.99.0",
+    "@vercel/blob": "^2.8.1",
     "next": "16.3.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",
