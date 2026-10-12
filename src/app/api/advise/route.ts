@@ -1,8 +1,7 @@
 import { z } from "zod/v4";
-import { AdviceError, advisorConfigured, getPromptVersion, requestAdvice } from "@/lib/advisor";
+import { AdviceError, advisorConfigured, probeAdvisor, requestAdvice } from "@/lib/advisor";
 import { CATEGORY_LABELS } from "@/lib/classify";
 import { dict, localeFromRequest } from "@/lib/i18n";
-import { getMarketSnapshot } from "@/lib/market";
 import { CADENCES, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
 import { readSession } from "@/lib/auth";
@@ -20,12 +19,12 @@ const ADVICE_DAILY_CAP = Number(process.env.ADVICE_DAILY_CAP || 300);
 const CACHE_TTL_SEC = 3600;
 
 /** Same portfolio shape + same question + same market regime + same prompt → same answer; don't pay twice. */
+
 async function adviceCacheKey(
   holdings: { asset: string; valueUsd: number }[],
   outside: OutsidePriced[],
   params: Record<string, unknown>,
-  regime: string,
-  promptVersion: number | "unknown",
+  probe: { regime: string; promptVersion: number | "unknown" },
 ): Promise<string> {
   const total = holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
   const byAsset = new Map<string, number>();
@@ -38,7 +37,7 @@ async function adviceCacheKey(
   const byKind = new Map<string, number>();
   for (const h of outside) byKind.set(h.kind, (byKind.get(h.kind) ?? 0) + h.valueUsd);
   const outsideShape = [...byKind.entries()].map(([k, v]) => [k, Math.round((v / total) * 10)] as const).sort();
-  const fingerprint = JSON.stringify({ v: promptVersion, shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime });
+  const fingerprint = JSON.stringify({ v: probe.promptVersion, shape, outsideShape, size: Math.round(Math.log10(total) * 2), ...params, regime: probe.regime });
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(fingerprint));
   return `advcache:${Buffer.from(digest).toString("hex").slice(0, 32)}`;
 }
@@ -128,10 +127,10 @@ export async function POST(request: Request) {
   if (!advisorConfigured) return Response.json({ error: t.advisorNotConfigured }, { status: 500 });
 
   try {
-    const [market, promptVersion] = await Promise.all([getMarketSnapshot(), getPromptVersion()]);
-    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, cadence, allowPerps, locale }, market.regime, promptVersion);
+    const probe = await probeAdvisor();
+    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, cadence, allowPerps, locale }, probe);
     const cached = await cacheGet<Awaited<ReturnType<typeof requestAdvice>>>(cacheKey);
-    if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), market, cached: true });
+    if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), cached: true });
 
     // Only uncached requests spend money, so only they count against the limits.
     const hour = Math.floor(Date.now() / 3_600_000);
@@ -145,9 +144,9 @@ export async function POST(request: Request) {
     if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
     if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
 
-    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, market, locale });
+    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, locale });
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
-    return Response.json({ advice, trades: computeTrades(holdings, advice), market });
+    return Response.json({ advice, trades: computeTrades(holdings, advice) });
   } catch (e) {
     if (e instanceof AdviceError) {
       const message =

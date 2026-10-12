@@ -4,11 +4,11 @@ import { cached } from "./http";
 import type { Locale } from "./i18n";
 import { VENUES, type Cadence, type RiskLevel } from "./options";
 import type { OutsidePriced } from "./outside";
-import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
+import type { Category, Holding, PerpPosition } from "./types";
 
 /**
  * Client for the private advisor service (mrmarket-labs/advisor), which owns the prompt, the
- * investable universe and the persona lenses. This file only knows the wire contract.
+ * market read, the investable universe and the persona lenses. This file only knows the wire contract.
  */
 const ADVISOR_URL = (process.env.ADVISOR_URL || "").replace(/\/$/, "");
 const ADVISOR_TOKEN = process.env.ADVISOR_API_TOKEN || "";
@@ -58,7 +58,6 @@ export interface AdviceRequest {
   /** How often the user wants to touch the portfolio. */
   cadence: Cadence;
   allowPerps: boolean;
-  market: MarketSnapshot;
   /** Language for every free-text field; tickers and venue ids stay as given. */
   locale: Locale;
 }
@@ -88,15 +87,24 @@ export class AdviceError extends Error {
 
 const headers = { authorization: `Bearer ${ADVISOR_TOKEN}`, "content-type": "application/json" };
 
-/** The advisor's prompt version, refreshed every minute, so the cache key retires answers from an old prompt. */
-export function getPromptVersion(): Promise<number | "unknown"> {
-  return cached("advisor-version", 60_000, async () => {
+export interface AdvisorProbe {
+  promptVersion: number | "unknown";
+  /** The advisor's current market regime; it reads the market itself. */
+  regime: string | "unknown";
+}
+
+/** Prompt version and regime, refreshed every minute, so the cache key retires answers from an old prompt or regime. */
+export function probeAdvisor(): Promise<AdvisorProbe> {
+  return cached("advisor-probe", 60_000, async (): Promise<AdvisorProbe> => {
     try {
-      const res = await fetch(`${ADVISOR_URL}/api/advise`, { headers, signal: AbortSignal.timeout(5_000) });
-      const body = (await res.json()) as { promptVersion?: unknown };
-      return typeof body.promptVersion === "number" ? body.promptVersion : "unknown";
+      const res = await fetch(`${ADVISOR_URL}/api/advise`, { headers, signal: AbortSignal.timeout(10_000) });
+      const body = (await res.json()) as { promptVersion?: unknown; regime?: unknown };
+      return {
+        promptVersion: typeof body.promptVersion === "number" ? body.promptVersion : "unknown",
+        regime: typeof body.regime === "string" ? body.regime : "unknown",
+      };
     } catch {
-      return "unknown";
+      return { promptVersion: "unknown", regime: "unknown" };
     }
   });
 }

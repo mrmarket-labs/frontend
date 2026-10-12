@@ -1,8 +1,7 @@
 import { cached, getJson } from "./http";
-import { getMarketSnapshot } from "./market";
 import { getPacfi } from "./pacfi";
+import { coingecko } from "./prices";
 import { SIGNALS, type FiredEvent, type SignalId, type SignalReading, type SignalsResponse, type SignalStatus } from "./signals";
-import type { MarketSnapshot } from "./types";
 
 const TTL_MS = 10 * 60_000;
 const FIRED_SHOWN = 8;
@@ -39,7 +38,7 @@ function above(value: number, line: number, inclusive = false): SignalStatus {
   return value >= line - Math.abs(line) * NEAR ? "close" : "quiet";
 }
 
-async function fearGreed(snapshot: MarketSnapshot | null): Promise<Feed> {
+async function fearGreed(): Promise<Feed> {
   const res = await getJson<{ data: { value: string; timestamp: string }[] }>("https://api.alternative.me/fng/?limit=0");
   const series = res.data
     .map((d) => ({ value: Number(d.value), at: Number(d.timestamp) * 1000 }))
@@ -53,14 +52,17 @@ async function fearGreed(snapshot: MarketSnapshot | null): Promise<Feed> {
       armed = false;
     } else if (p.value <= FNG_REARM) armed = true;
   }
-  const now = snapshot?.fearGreed?.value ?? series.at(-1)?.value;
+  const now = series.at(-1)?.value;
   if (now == null) throw new Error("No Fear & Greed reading.");
   const status = above(now, FNG_LINE);
   return { now: String(now), status, firedAt: status === "fired" ? history.at(-1) : undefined, history };
 }
 
-function dominance(snapshot: MarketSnapshot | null): Feed {
-  const now = snapshot?.btcDominance;
+async function dominance(): Promise<Feed> {
+  const global = await cached("cg-global", TTL_MS, () =>
+    coingecko<{ data: { market_cap_percentage: { btc: number } } }>("/global"),
+  );
+  const now = global.data.market_cap_percentage.btc;
   if (now == null) throw new Error("No dominance reading.");
   const status: SignalStatus = now < DOMINANCE_LINE ? "fired" : now <= DOMINANCE_LINE * (1 + NEAR) ? "close" : "quiet";
   return { now: `${now.toFixed(1)}%`, status };
@@ -148,11 +150,10 @@ async function pacfi(): Promise<Feed> {
 
 export function getSignals(): Promise<SignalsResponse> {
   return cached("signals", TTL_MS, async () => {
-    const snapshot = await getMarketSnapshot().catch(() => null);
     // Berkshire cash, CAPE and MVRV have no agreed source yet, so they have no feed.
     const feeds: Partial<Record<SignalId, () => Promise<Feed> | Feed>> = {
-      fng: () => fearGreed(snapshot),
-      dom: () => dominance(snapshot),
+      fng: fearGreed,
+      dom: dominance,
       w200: twoHundredWeek,
       fund: funding,
       pacfi,
