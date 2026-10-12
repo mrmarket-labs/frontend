@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnalyzeView } from "@/components/AnalyzeView";
 import { AppShell, type Tab } from "@/components/AppShell";
 import { ConnectView } from "@/components/ConnectView";
+import { FeedbackView } from "@/components/FeedbackView";
 import { OutsideView } from "@/components/OutsideView";
 import { PortfolioView } from "@/components/PortfolioView";
 import { ReviewSheet } from "@/components/ReviewSheet";
@@ -20,12 +21,13 @@ import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
 import type { Trade } from "@/lib/rebalance";
 import type { PortfolioResponse } from "@/lib/types";
 import { loadVerdict, saveVerdict, type Verdict } from "@/lib/verdict";
+import { loadWaitlistSent, saveWaitlistSent, sizeBucket, type FeedbackForm } from "@/lib/waitlist-options";
 import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progress";
 import { getSession, signIn, signOut, signableAddress, type SessionInfo } from "@/lib/wallets/signin";
 import { useWallets } from "@/lib/wallets/useWallets";
 
-/** connect ──▶ portfolio ──▶ analyze ──▶ verdict; portfolio, verdict and signals are the tabs; outside is a side step. */
-type View = "connect" | "outside" | "analyze" | Tab;
+/** connect ──▶ portfolio ──▶ analyze ──▶ verdict ──▶ feedback; portfolio, verdict and signals are the tabs; outside is a side step. */
+type View = "connect" | "outside" | "analyze" | "feedback" | Tab;
 
 /** A failed API call: the server's message in the user's language, plus a code where it sends one. */
 class ApiError extends Error {
@@ -61,6 +63,7 @@ export default function Home() {
   const [advising, setAdvising] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [waitlistSent, setWaitlistSent] = useState<string | null>(null);
 
   // Money the app cannot see: stated by hand, priced with rates the server fetches.
   const [outside, setOutside] = useState<OutsideHolding[]>([]);
@@ -104,6 +107,7 @@ export default function Home() {
     /* eslint-disable react-hooks/set-state-in-effect */
     setProgress(loadProgress());
     setOutside(loadOutside());
+    setWaitlistSent(loadWaitlistSent()?.email ?? null);
     void loadFx();
     const saved = loadVerdict();
     if (saved) {
@@ -240,6 +244,16 @@ export default function Home() {
     if (step.kind === "swap") void scan();
   }
 
+  async function submitFeedback(form: FeedbackForm) {
+    const context = verdict
+      ? { personaId: verdict.personaId, risk: verdict.risk, cadence: verdict.cadence, sizeBucket: sizeBucket(verdict.holdings.reduce((s, h) => s + h.valueUsd, 0)) }
+      : undefined;
+    await postJson<{ ok: true }>("/api/waitlist", { ...form, context }, t.common.requestFailed);
+    const sent = { email: form.email.trim().toLowerCase(), at: Date.now() };
+    saveWaitlistSent(sent);
+    setWaitlistSent(sent.email);
+  }
+
   const reviewWallet = review ? wallets.walletFor(review.address) : undefined;
   // Every screen past connect is about a scanned portfolio.
   const shown: View = portfolio ? view : "connect";
@@ -257,12 +271,14 @@ export default function Home() {
         onScan={() => void scan(true)}
         onWalletsChanged={onWalletsChanged}
         onBack={portfolio ? () => go("portfolio") : undefined}
+        onTryFirst={portfolio ? () => go("analyze") : undefined}
         footer={<LegalNote />}
       />
     );
 
-  const isStep = shown === "analyze" || shown === "outside";
-  const tab: Tab = isStep ? "portfolio" : shown;
+  const isStep = shown === "analyze" || shown === "outside" || shown === "feedback";
+  const tab: Tab = shown === "feedback" ? "verdict" : isStep ? "portfolio" : shown;
+  const stepBack: View = shown === "feedback" ? "verdict" : "portfolio";
 
   return (
     <>
@@ -284,7 +300,7 @@ export default function Home() {
         mobileBar={
           isStep ? (
             <div className="flex items-center justify-between">
-              <button type="button" aria-label={t.shell.backToPortfolio} onClick={() => go("portfolio")} className="flex size-tap items-center">
+              <button type="button" aria-label={t.shell.backToPortfolio} onClick={() => go(stepBack)} className="flex size-tap items-center">
                 <span className="flex size-[34px] items-center justify-center rounded-full bg-surface-control font-mono text-row">←</span>
               </button>
               <span className="num text-label text-ink-2">{usd(portfolio.totalUsd)}</span>
@@ -351,6 +367,7 @@ export default function Home() {
               onWallets={() => go("connect")}
               onAnalyze={() => go("analyze")}
               onSignals={() => go("signals")}
+              onFeedback={() => go("feedback")}
             />
             {verdict && (
               <div className="mt-[26px] max-w-[46em]">
@@ -359,6 +376,7 @@ export default function Home() {
             )}
           </>
         )}
+        {shown === "feedback" && <FeedbackView sent={waitlistSent} onSubmit={submitFeedback} onBack={() => go("verdict")} onDone={() => go("portfolio")} />}
         {shown === "signals" && <SignalsView />}
       </AppShell>
 

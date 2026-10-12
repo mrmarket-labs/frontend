@@ -120,7 +120,10 @@ export function AnalyzeView({
         <div>
           <button type="button" onClick={onAdvise} disabled={advising || !canAdvise} className={`${BTN_PRIMARY} h-[52px] w-full`}>
             {advising ? <Spinner /> : <span className="font-mono">◴</span>}
-            {advising ? t.analyze.thinking(lens) : t.analyze.think(lens)}
+            {advising ? t.analyze.thinking(lens) : t.analyze.testAnalysis(lens)}
+          </button>
+          <button type="button" disabled title={t.analyze.comingSoon} className={`${BTN_TONAL} mt-2 h-[52px] w-full cursor-not-allowed opacity-50`}>
+            {t.analyze.proAnalysis} <span className="text-meta font-normal text-ink-2">· {t.analyze.comingSoon}</span>
           </button>
           <p className="mt-2.5 text-center text-meta text-ink-3">{advising ? t.analyze.takesTimeKeepOpen : t.analyze.takesTime}</p>
           {adviceError && <p role="alert" className="mt-2.5 text-center text-body text-risk">{adviceError}</p>}

@@ -90,7 +90,7 @@ function Delta({ points, hold, pts }: { points: number; hold: string; pts: (sign
   return <div className={`text-meta ${points > 0 ? "text-accent" : "text-warn"}`}>{pts(`${points > 0 ? "+" : "−"}${Math.abs(points).toFixed(0)}`)}</div>;
 }
 
-export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, onWallets, onAnalyze, onSignals }: {
+export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, onWallets, onAnalyze, onSignals, onFeedback }: {
   verdict: Verdict | null;
   wallets: WalletsApi;
   progress: Progress;
@@ -101,6 +101,8 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
   /** Open the analyze page: the first read, or "Run again". */
   onAnalyze: () => void;
   onSignals: () => void;
+  /** The last step: what they thought, and the waitlist. */
+  onFeedback: () => void;
 }) {
   const { locale, t } = useLocale();
   const [more, setMore] = useState(false);
@@ -244,6 +246,14 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="mt-[18px] rounded-card-sm bg-surface-live-2 px-[15px] py-4 lg:mt-5">
+            <SectionLabel>{t.verdict.feedbackTitle}</SectionLabel>
+            <p className="mt-2 text-label leading-normal text-accent-text">{t.verdict.feedbackIntro}</p>
+            <button type="button" onClick={onFeedback} className={`${BTN_PRIMARY} mt-3.5 h-12 w-full`}>
+              {t.verdict.feedbackCta} <span className="font-mono">→</span>
+            </button>
           </div>
         </div>
       </div>
