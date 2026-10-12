@@ -123,8 +123,7 @@ export const en = {
     intro: "Add every wallet you want watched. Read-only until you sign a trade — no keys, no approvals.",
     earlyAccess: "Early access",
     waitlistTitle: "Join the waitlist",
-    waitlistIntro: "Try it first. Scan your wallets, run a test analysis, and tell us what you think at the end. The waitlist for Pro analysis is the last step.",
-    tryFirst: "Try it first",
+    waitlistIntro: "Try it before you join. Pick a wallet, scan it, run a test analysis, and tell us what you think at the end. The waitlist for Pro analysis is the last step.",
     yourWallets: "Your wallets",
     empty: "No wallets yet. Connect one, or paste any address to watch it without connecting.",
     connected: "● connected",
@@ -154,7 +153,7 @@ export const en = {
     watchAddressButton: "+ Watch address",
     scanning: "Scanning chains…",
     rescan: "Rescan portfolio",
-    scan: "Scan my portfolio",
+    scan: "Scan my portfolio to join the waitlist",
     freeNote: "Looking costs nothing and signs nothing.",
     /** What a discovered wallet speaks, under its name in the picker. */
     chainsOf: (parts: string[]) => (parts.length > 1 ? `${parts.join(" · ")} in one connection` : parts[0] ?? ""),

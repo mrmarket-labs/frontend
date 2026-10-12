@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { errorMessage } from "@/lib/i18n";
 import { useT } from "@/lib/i18n/context";
 import type { Holding } from "@/lib/types";
@@ -98,7 +98,7 @@ function ManageWallet({ wallet, api, connected, onChanged, onClose, startAdding 
  * Onboarding, and the place wallets are managed afterwards. Read-only until a signature is
  * required: connecting or watching only ever reads public balances.
  */
-export function ConnectView({ api, holdings, scanned, scanning, scanError, onScan, onWalletsChanged, onBack, onTryFirst, footer }: {
+export function ConnectView({ api, holdings, scanned, scanning, scanError, onScan, onWalletsChanged, onBack, footer }: {
   api: WalletsApi;
   holdings: Holding[];
   scanned: boolean;
@@ -109,8 +109,6 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   onWalletsChanged: () => void;
   /** Present once there is a portfolio to go back to. */
   onBack?: () => void;
-  /** "Try it first" once a portfolio exists: straight to the lens screen. Before that it opens the wallet picker. */
-  onTryFirst?: () => void;
   footer?: React.ReactNode;
 }) {
   const t = useT();
@@ -121,14 +119,6 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   const [connectHint, setConnectHint] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [managing, setManaging] = useState<{ id: string; adding: boolean } | null>(null);
-  const walletsCard = useRef<HTMLDivElement>(null);
-
-  function tryFirst() {
-    if (onTryFirst) return onTryFirst();
-    api.refresh();
-    setPanel("picker");
-    walletsCard.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 
   const valueOf = (a: WalletAddress) => holdings.filter((h) => sameAddress(h.address, a.address)).reduce((s, h) => s + h.valueUsd, 0);
   const walletTotal = (w: Wallet) => w.addresses.reduce((s, a) => s + valueOf(a), 0);
@@ -194,20 +184,19 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
           <h1 className="font-display text-display leading-[1.02] tracking-[-0.2px] lg:text-hero-lg">{t.connect.heroLine1}</h1>
           <p className="mt-1 font-display text-display leading-[1.02] text-accent italic lg:text-hero-lg">{t.connect.heroLine2}</p>
           <p className="mt-4 max-w-[34em] text-body leading-normal text-ink-2">{t.connect.intro}</p>
-          <div className="mt-6 max-w-[34em] rounded-card bg-surface-live-2 p-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-live px-2.5 py-1 text-meta text-accent-text">● {t.connect.earlyAccess}</span>
-            <h2 className="mt-2.5 font-display text-title leading-[1.1]">{t.connect.waitlistTitle}</h2>
-            <p className="mt-1.5 text-label leading-normal text-accent-text">{t.connect.waitlistIntro}</p>
-            <button type="button" onClick={tryFirst} className={`${BTN_PRIMARY} mt-3.5 h-12 px-5`}>
-              {t.connect.tryFirst} <span className="font-mono">→</span>
-            </button>
-          </div>
         </div>
         {footer && <div className="mt-10 hidden max-w-[34em] lg:block">{footer}</div>}
       </div>
 
       <div className="flex flex-1 flex-col lg:flex-none">
-        <div ref={walletsCard} className="mx-gutter mt-7 flex flex-1 flex-col rounded-card bg-surface p-4 lg:mx-0 lg:mt-0 lg:min-h-[420px]">
+        {!scanned && (
+          <div className="px-gutter pt-8 lg:px-0 lg:pt-0">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-live px-2.5 py-1 text-meta text-accent-text">● {t.connect.earlyAccess}</span>
+            <h2 className="mt-2.5 font-display text-title leading-[1.1]">{t.connect.waitlistTitle}</h2>
+            <p className="mt-1.5 max-w-[34em] text-label leading-normal text-ink-2">{t.connect.waitlistIntro}</p>
+          </div>
+        )}
+        <div className={`mx-gutter flex flex-1 flex-col rounded-card bg-surface p-4 lg:mx-0 lg:min-h-[420px] ${scanned ? "mt-7 lg:mt-0" : "mt-4"}`}>
           <div className="flex items-center justify-between">
             <SectionLabel>{t.connect.yourWallets}</SectionLabel>
             {scanned && <span className="num text-meta">{usd(total)}</span>}

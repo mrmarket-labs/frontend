@@ -271,7 +271,6 @@ export default function Home() {
         onScan={() => void scan(true)}
         onWalletsChanged={onWalletsChanged}
         onBack={portfolio ? () => go("portfolio") : undefined}
-        onTryFirst={portfolio ? () => go("analyze") : undefined}
         footer={<LegalNote />}
       />
     );
