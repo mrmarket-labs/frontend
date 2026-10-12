@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/context";
-import { HORIZONS, RISK_LEVELS, type Horizon, type RiskLevel } from "@/lib/options";
+import { CADENCES, RISK_LEVELS, type Cadence, type RiskLevel } from "@/lib/options";
 import { PERSONAS } from "@/lib/personas";
 import type { SessionInfo } from "@/lib/wallets/signin";
 import { shortAddress, type Wallet } from "@/lib/wallets/types";
@@ -37,17 +37,17 @@ function Segmented<T extends string>({ label, options, names, value, onChange, d
 }
 
 export function AnalyzeView({
-  personaId, risk, horizon, allowPerps, onPersona, onRisk, onHorizon, onPerps,
+  personaId, risk, cadence, allowPerps, onPersona, onRisk, onCadence, onPerps,
   session, signableWallets, signingIn, signInError, onVerify, onSignOut, onWallets,
   outside, onOutside, canAdvise, advising, adviceError, onAdvise,
 }: {
   personaId: string;
   risk: RiskLevel;
-  horizon: Horizon;
+  cadence: Cadence;
   allowPerps: boolean;
   onPersona: (id: string) => void;
   onRisk: (r: RiskLevel) => void;
-  onHorizon: (h: Horizon) => void;
+  onCadence: (c: Cadence) => void;
   onPerps: (on: boolean) => void;
   session: SessionInfo | null;
   signableWallets: Wallet[];
@@ -94,7 +94,7 @@ export function AnalyzeView({
 
       <div className="mt-[26px] flex flex-col gap-[18px]">
         <Segmented label={t.analyze.riskTolerance} options={RISK_LEVELS} names={t.risk} value={risk} onChange={onRisk} disabled={advising} />
-        <Segmented label={t.analyze.horizon} options={HORIZONS} names={t.horizon} value={horizon} onChange={onHorizon} disabled={advising} />
+        <Segmented label={t.analyze.cadence} options={CADENCES} names={t.cadence} value={cadence} onChange={onCadence} disabled={advising} />
 
         <div className="flex items-start gap-3">
           <Toggle on={allowPerps} onChange={onPerps} label={t.analyze.allowPerpsToggle} disabled={advising} />

@@ -10,7 +10,7 @@ It then turns the difference into a rebalance plan of same-chain swaps you sign 
 ## Run it
 
 ```bash
-cp .env.example .env.local   # add ANTHROPIC_API_KEY
+cp .env.example .env.local   # add ADVISOR_URL and ADVISOR_API_TOKEN (see below)
 npm install
 npm run dev
 ```
@@ -26,7 +26,7 @@ Open http://localhost:3000.
 | Bitcoin balance (address or xpub/ypub/zpub) | `src/lib/chains/bitcoin.ts` | mempool.space, Trezor Blockbook for xpubs |
 | Market regime | `src/lib/market.ts` | CoinGecko (200d BTC/ETH/SOL history, dominance) + Fear & Greed index |
 | PACFI v1.0 | `src/lib/pacfi.ts`, `src/app/api/pacfi/route.ts` | `mrmarket-labs/indicators` (`INDICATORS_URL`, `INDICATORS_API_TOKEN`), asked for `?version=v1.0`; served at `/api/pacfi` |
-| Allocation | `src/lib/advisor.ts` | Claude Opus 5.5, structured output validated with Zod |
+| Allocation | `src/lib/advisor.ts` | Client for the private advisor service (`mrmarket-labs/advisor`), which owns the prompt and calls Claude Opus 5.5; the response is validated here with Zod |
 | Trades | `src/lib/rebalance.ts` | Deterministic diff of current vs target, ignoring moves under 1% |
 | Rebalance plan | `src/lib/plan.ts` | Pairs sells and buys per chain into direct swaps; stablecoin buys go wherever proceeds are; the rest is manual |
 | Wallets | `src/lib/wallets/` | Phantom multi-chain + EIP-6963 EVM wallets, watched addresses, localStorage persistence |
@@ -52,6 +52,8 @@ funds: every swap is a transaction or order the user signs in their own wallet.
   approves the rate once with a signature, then each order carries it. Leave it unset to charge no fee there;
   Hyperliquid only pays builders whose account holds at least 100 USDC and rejects orders naming any other.
 
+The prompt, the investable universe and the persona lenses live in the private `mrmarket-labs/advisor` repo; this site sends it the portfolio, the market read and the chosen lens, and renders the answer. Locally, run that repo's `npm run dev` and point `ADVISOR_URL` at `http://localhost:3001`.
+
 ## Abuse protection
 
 Every advisor run costs real money (Claude), so `/api/advise` is gated:
@@ -61,7 +63,7 @@ Every advisor run costs real money (Claude), so `/api/advise` is gated:
   (`AUTH_SECRET`). Throwaway wallets can't farm the endpoint because empty ones are refused.
 - **Quotas**: a global daily cap (`ADVICE_DAILY_CAP`, the hard ceiling on spend), per-wallet per day
   (`ADVICE_PER_WALLET_DAY`) and per-IP per hour. Portfolio scans and swap quotes are rate limited too.
-- **Cache**: identical questions (same portfolio shape, persona, risk, horizon, market regime) are served
+- **Cache**: identical questions (same portfolio shape, persona, risk, cadence, market regime) are served
   from a one-hour cache and don't count against quotas.
 - Counters live in Upstash Redis (`UPSTASH_REDIS_REST_URL/TOKEN`, add via the Vercel marketplace). Without it
   the app still works but limits are per serverless instance, which is not real protection.

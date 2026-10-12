@@ -135,7 +135,7 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
     <div>
       <PageHeader
         title={t.verdict.title}
-        sub={[personaName && t.verdict.throughLens(personaName), t.risk[verdict.risk], t.horizon[verdict.horizon], t.verdict.readOn(shortDate(verdict.at, t))]
+        sub={[personaName && t.verdict.throughLens(personaName), t.risk[verdict.risk], verdict.cadence && t.cadence[verdict.cadence], t.verdict.readOn(shortDate(verdict.at, t))]
           .filter(Boolean)
           .join(" · ")}
       >

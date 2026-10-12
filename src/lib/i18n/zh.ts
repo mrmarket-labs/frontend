@@ -70,7 +70,7 @@ export const zh: Dict = {
   },
 
   risk: { conservative: "保守", balanced: "平衡", aggressive: "进取" },
-  horizon: { "under 1 year": "1 年内", "1-3 years": "1–3 年", "3+ years": "3 年以上" },
+  cadence: { rarely: "一年一次或更少", quarterly: "每几个月", monthly: "每月或更频繁" },
   roles: { defensive: "防御", core: "核心", growth: "增长", speculative: "投机" },
 
   personas: {
@@ -232,7 +232,7 @@ export const zh: Dict = {
     titleTail: "…",
     intro: "选一位来审视你的持仓。视角决定目标，你的设置做微调。",
     riskTolerance: "风险承受度",
-    horizon: "持有期限",
+    cadence: "你想多久打理一次持仓？",
     allowPerpsToggle: "允许 1 倍永续多单",
     allowPerps: "允许永续合约",
     allowPerpsNote: "现货流动性不足时，在 Hyperliquid 开 1 倍多单。需要持续支付资金费。",
@@ -444,11 +444,12 @@ export const zh: Dict = {
     verifyToRun: "请先验证钱包，再运行分析。",
     invalidRequest: "无效请求。",
     unknownPersona: "未知的投资者视角。",
-    noApiKey: "请在 .env.local 中设置 ANTHROPIC_API_KEY 以启用分析。",
+    advisorNotConfigured: "请在 .env.local 中设置 ADVISOR_URL 和 ADVISOR_API_TOKEN 以启用分析。",
+    advisorError: (message: string) => `分析服务错误：${message}`,
     globalLimit: "分析已达到今日全局上限，将于 UTC 午夜重置。",
     walletLimit: (n: number) => `此钱包已用完今日 ${n} 次分析，明天再来。`,
     ipLimit: (minutes: number) => `来自你网络的分析请求过多。请 ${minutes} 分钟后重试。`,
-    badApiKey: "服务器上的 ANTHROPIC_API_KEY 缺失或无效。",
+    badApiKey: "分析服务的 ANTHROPIC_API_KEY 缺失或无效。",
     claudeRateLimited: "Claude API 限流中，请一分钟后重试。",
     claudeError: (message: string) => `Claude API 错误：${message}`,
     somethingWrong: "出了点问题。",

@@ -13,7 +13,7 @@ import { VerdictView } from "@/components/VerdictView";
 import type { Advice } from "@/lib/advisor";
 import { errorMessage } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n/context";
-import type { Horizon, RiskLevel } from "@/lib/options";
+import type { Cadence, RiskLevel } from "@/lib/options";
 import { loadOutside, outsideTotal, priceOutside, saveOutside, type OutsideHolding, type Rates } from "@/lib/outside";
 import { PERSONAS } from "@/lib/personas";
 import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
@@ -56,7 +56,7 @@ export default function Home() {
 
   const [personaId, setPersonaId] = useState(PERSONAS[0].id);
   const [risk, setRisk] = useState<RiskLevel>("balanced");
-  const [horizon, setHorizon] = useState<Horizon>("3+ years");
+  const [cadence, setCadence] = useState<Cadence>("rarely");
   const [allowPerps, setAllowPerps] = useState(false);
   const [advising, setAdvising] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
@@ -110,7 +110,7 @@ export default function Home() {
       setVerdict(saved);
       setPersonaId(saved.personaId);
       setRisk(saved.risk);
-      setHorizon(saved.horizon);
+      if (saved.cadence) setCadence(saved.cadence);
     }
     /* eslint-enable react-hooks/set-state-in-effect */
     getSession().then(setSession).catch(() => undefined);
@@ -200,7 +200,7 @@ export default function Home() {
       if (priced.length < outside.length) throw new Error(t.outside.ratesFailed);
       const data = await postJson<{ advice: Advice; trades: Trade[] }>(
         "/api/advise",
-        { holdings: portfolio.holdings, positions: portfolio.positions, outside: priced, personaId, risk, horizon, allowPerps },
+        { holdings: portfolio.holdings, positions: portfolio.positions, outside: priced, personaId, risk, cadence, allowPerps },
         t.common.requestFailed,
       );
       const next: Verdict = {
@@ -211,7 +211,7 @@ export default function Home() {
         steps: compilePlan(portfolio.holdings, data.trades, t),
         personaId,
         risk,
-        horizon,
+        cadence,
         locale,
         at: Date.now(),
       };
@@ -319,11 +319,11 @@ export default function Home() {
           <AnalyzeView
             personaId={personaId}
             risk={risk}
-            horizon={horizon}
+            cadence={cadence}
             allowPerps={allowPerps}
             onPersona={setPersonaId}
             onRisk={setRisk}
-            onHorizon={setHorizon}
+            onCadence={setCadence}
             onPerps={setAllowPerps}
             session={session}
             signableWallets={signableWallets}

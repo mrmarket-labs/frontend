@@ -1,6 +1,6 @@
 import type { Advice } from "./advisor";
 import type { Locale } from "./i18n";
-import type { Horizon, RiskLevel } from "./options";
+import type { Cadence, RiskLevel } from "./options";
 import type { OutsidePriced } from "./outside";
 import type { Step } from "./plan";
 import type { Trade } from "./rebalance";
@@ -17,7 +17,8 @@ export interface Verdict {
   steps: Step[];
   personaId: string;
   risk: RiskLevel;
-  horizon: Horizon;
+  /** How often the user said they would touch the portfolio; absent on verdicts saved when the question asked for a horizon. */
+  cadence?: Cadence;
   /** Language the advisor wrote in; verdicts saved before languages existed have none (English). */
   locale?: Locale;
   at: number;

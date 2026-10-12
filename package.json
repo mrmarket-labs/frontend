@@ -9,7 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.129.0",
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "@solana/web3.js": "^1.99.0",

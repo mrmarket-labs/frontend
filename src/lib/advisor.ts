@@ -1,269 +1,122 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod/v4";
 import { CATEGORY_LABELS } from "./classify";
+import { cached } from "./http";
 import type { Locale } from "./i18n";
-import { VENUES, type Horizon, type RiskLevel } from "./options";
-import { formatAmount, type OutsideKind, type OutsidePriced } from "./outside";
-import type { Persona } from "./personas";
+import { VENUES, type Cadence, type RiskLevel } from "./options";
+import type { OutsidePriced } from "./outside";
 import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
-import type { HyperliquidVenues } from "./venues";
-
-const CATEGORIES = Object.keys(CATEGORY_LABELS) as [Category, ...Category[]];
-
-const usdK = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : `$${Math.round(n / 1e3)}k`);
 
 /**
- * What the advisor may recommend, and where it can be bought. Keeping the universe explicit stops
- * the model from inventing tickers and keeps every suggestion executable on a known venue.
+ * Client for the private advisor service (mrmarket-labs/advisor), which owns the prompt, the
+ * investable universe and the persona lenses. This file only knows the wire contract.
  */
-function buildUniverse(venues: HyperliquidVenues | null, allowPerps: boolean): string {
-  const spotVol = (token: string) => {
-    const m = venues?.spot.find((x) => x.token === token);
-    return m ? ` (24h volume ${usdK(m.volume24hUsd)})` : "";
-  };
-  const lines = [
-    "Format: canonical asset -> where to buy it (venue: instrument). Use the canonical asset in `asset` and the exact ticker in `instrument`.",
-    "The app executes swaps on solana, ethereum and ethereum-l2, and spot orders on hyperliquid-spot, in the user's own wallet. Buying on bitcoin, hyperliquid-perp, or anything that needs a bridge is a manual step for the user.",
-    "USDC, USDT -> any chain the user already holds funds on",
-    `BTC -> bitcoin: BTC | ethereum or ethereum-l2: cbBTC/WBTC | hyperliquid-spot: UBTC${spotVol("UBTC")}`,
-    `ETH -> ethereum or ethereum-l2: ETH or wstETH (staked) | hyperliquid-spot: UETH${spotVol("UETH")}`,
-    `SOL -> solana: SOL or JitoSOL (staked) | hyperliquid-spot: USOL${spotVol("USOL")}`,
-    `LINK, AAVE -> ethereum | JUP -> solana | HYPE -> hyperliquid-spot: HYPE${spotVol("HYPE")} (can be staked)`,
-    `GOLD -> hyperliquid-spot: XAUT0${spotVol("XAUT0")} | ethereum: PAXG or XAUT | solana: PAXG`,
-    "Tokenized stocks (canonical = xStock ticker in caps, e.g. SPYX, QQQX, NVDAX, AAPLX, GOOGLX, TSLAX, COINX, MSTRX, CRCLX) ->",
-    "  solana: SPYx, QQQx, NVDAx, AAPLx, GOOGLx, TSLAx, COINx, MSTRx, CRCLx (xStocks; deepest spot liquidity)",
-    `  hyperliquid-spot: SPYX${spotVol("SPYX")}, NVDAX${spotVol("NVDAX")}, QQQX${spotVol("QQQX")} (thin; only for small sizes)`,
-    "Speculative -> only tokens the user already holds (keep, trim or exit; never introduce new memecoins)",
-  ];
-  if (allowPerps && venues?.perps.length) {
-    lines.push(
-      "Perps (user opted in) -> hyperliquid-perp, 1x long only, canonical asset = market + \"-PERP\":",
-      ...venues.perps.map(
-        (p) =>
-          `  ${p.market}-PERP (instrument xyz:${p.market}): 24h volume ${usdK(p.volume24hUsd)}, a 1x long currently pays ${p.longFundingApr.toFixed(1)}%/yr funding`,
-      ),
-    );
-  } else {
-    lines.push("Perps: NOT allowed. Never use venue hyperliquid-perp.");
-  }
-  return lines.join("\n");
-}
+const ADVISOR_URL = (process.env.ADVISOR_URL || "").replace(/\/$/, "");
+const ADVISOR_TOKEN = process.env.ADVISOR_API_TOKEN || "";
+export const advisorConfigured = Boolean(ADVISOR_URL && ADVISOR_TOKEN);
 
-/** Bump when the prompt changes materially, so cached answers from the old prompt are not reused. */
-export const PROMPT_VERSION = 2;
-
+/** Response shape; mirrors `src/contract.ts` in the advisor repo. */
+const CATEGORIES = Object.keys(CATEGORY_LABELS) as [Category, ...Category[]];
 export const AdviceSchema = z.object({
-  verdict: z.string().describe("One punchy sentence answering: is the user holding the right assets?"),
-  diagnosis: z.string().describe("2-4 sentences on what is wrong or right with the current portfolio: concentration, risk, idle assets."),
-  marketView: z.string().describe("2-3 sentences on current crypto market conditions and how they shape this allocation."),
-  personaTake: z.string().describe("2-3 sentences in the spirit of the persona's philosophy explaining the approach. Do not fabricate quotes."),
-  wholePicture: z
-    .string()
-    .nullable()
-    .describe(
-      "Only when holdings outside the app were reported: 2-3 sentences on how they shaped the on-chain targets (what the outside money already covers, what the on-chain sleeve should therefore do). Null when none were reported.",
-    ),
-  currentRiskScore: z.number().int().describe("1 (very safe) to 10 (extremely risky); rates the whole portfolio when outside holdings were reported"),
-  targetRiskScore: z.number().int().describe("1 (very safe) to 10 (extremely risky); rates the whole portfolio when outside holdings were reported"),
-  allocations: z
-    .array(
-      z.object({
-        asset: z.string().describe("Canonical asset from the investable universe, e.g. BTC, SOL, USDC, GOLD, SPYX, SP500-PERP"),
-        venue: z.enum(VENUES).describe("Where to buy or hold it"),
-        instrument: z.string().describe("Exact token or market to buy on that venue, e.g. XAUT0, SPYx, cbBTC, xyz:SP500"),
-        category: z.enum(CATEGORIES),
-        targetPct: z.number().describe("Percent of total portfolio; all allocations sum to 100"),
-        role: z.enum(["defensive", "core", "growth", "speculative"]),
-        rationale: z.string().describe("One sentence"),
-      }),
-    )
-    .describe("Target portfolio, 3-10 positions"),
-  trims: z
-    .array(
-      z.object({
-        asset: z.string().describe("Canonical asset the user currently holds, exactly as it appears in the current portfolio"),
-        reason: z.string().describe("One or two sentences: why to sell some or all of it, in the persona's spirit, specific to this asset and this portfolio"),
-      }),
-    )
-    .describe("One entry for every currently held asset whose weight the target reduces or removes. Empty if nothing is sold."),
-  risks: z.array(z.string()).describe("2-4 specific risks of the target portfolio (depegs, custody, tokenized-stock issuer risk, ...)"),
-  executionTips: z.array(z.string()).describe("2-4 practical tips: staging entries, fees, tax, staking idle SOL/ETH"),
+  verdict: z.string(),
+  diagnosis: z.string(),
+  marketView: z.string(),
+  personaTake: z.string(),
+  wholePicture: z.string().nullable(),
+  currentRiskScore: z.number().int(),
+  targetRiskScore: z.number().int(),
+  allocations: z.array(
+    z.object({
+      asset: z.string(),
+      venue: z.enum(VENUES),
+      instrument: z.string(),
+      category: z.enum(CATEGORIES),
+      targetPct: z.number(),
+      role: z.enum(["defensive", "core", "growth", "speculative"]),
+      rationale: z.string(),
+    }),
+  ),
+  trims: z.array(z.object({ asset: z.string(), reason: z.string() })),
+  risks: z.array(z.string()),
+  executionTips: z.array(z.string()),
 });
 export type Advice = z.infer<typeof AdviceSchema>;
 
+const AdviceResponseSchema = z.object({
+  advice: AdviceSchema,
+  promptVersion: z.number(),
+  model: z.string(),
+  usage: z.object({ inputTokens: z.number(), outputTokens: z.number() }),
+});
+
 export interface AdviceRequest {
+  personaId: string;
   holdings: Holding[];
   positions: PerpPosition[];
   /** Money the app cannot move, priced in dollars at the time of the read. */
   outside: OutsidePriced[];
-  persona: Persona;
   risk: RiskLevel;
-  horizon: Horizon;
+  /** How often the user wants to touch the portfolio. */
+  cadence: Cadence;
   allowPerps: boolean;
   market: MarketSnapshot;
-  venues: HyperliquidVenues | null;
   /** Language for every free-text field; tickers and venue ids stay as given. */
   locale: Locale;
 }
 
-function describePortfolio(holdings: Holding[]): string {
-  const total = holdings.reduce((s, h) => s + h.valueUsd, 0);
-  const byAsset = new Map<string, { value: number; category: Category; where: Set<string> }>();
-  for (const h of holdings) {
-    const entry = byAsset.get(h.asset) ?? { value: 0, category: h.category, where: new Set<string>() };
-    entry.value += h.valueUsd;
-    entry.where.add(`${h.symbol} on ${h.chain}`);
-    byAsset.set(h.asset, entry);
-  }
-  const lines = [...byAsset.entries()]
-    .sort((a, b) => b[1].value - a[1].value)
-    .map(([asset, e]) =>
-      `- ${asset} [${e.category}]: $${e.value.toFixed(0)} (${((e.value / total) * 100).toFixed(1)}%) held as ${[...e.where].join(", ")}`,
-    );
-  return `Total: $${total.toFixed(0)}\n${lines.join("\n")}`;
-}
+/** Codes the advise route maps to the user's language. The first eight are the advisor's own; the last two are ours. */
+export type AdviceErrorCode =
+  | "invalidRequest"
+  | "unknownPersona"
+  | "modelDeclined"
+  | "adviceCutOff"
+  | "unexpectedFormat"
+  | "badApiKey"
+  | "claudeRateLimited"
+  | "claudeError"
+  | "advisorNotConfigured"
+  | "advisorError";
+const ADVISOR_CODES: AdviceErrorCode[] = ["invalidRequest", "unknownPersona", "modelDeclined", "adviceCutOff", "unexpectedFormat", "badApiKey", "claudeRateLimited", "claudeError"];
 
-function describePositions(positions: PerpPosition[], holdings: Holding[]): string {
-  if (positions.length === 0) return "None.";
-  const total = holdings.reduce((s, h) => s + h.valueUsd, 0) || 1;
-  const notional = positions.reduce((s, p) => s + p.notionalUsd, 0);
-  const lines = positions.map(
-    (p) =>
-      `- ${p.side.toUpperCase()} ${p.coin} perp on ${p.venue}: $${p.notionalUsd.toFixed(0)} notional at ${p.leverage}x, ` +
-      `unrealized PnL $${p.unrealizedPnlUsd.toFixed(0)}${p.liquidationPx ? `, liquidation at $${p.liquidationPx}` : ""}`,
-  );
-  return `Total notional $${notional.toFixed(0)} (${(notional / total).toFixed(2)}x the portfolio's net value)\n${lines.join("\n")}`;
-}
-
-const OUTSIDE_LABELS: Record<OutsideKind, string> = {
-  cash: "Cash (fiat; the same job stablecoins do)",
-  stocks: "Stocks / index funds",
-  bonds: "Bonds",
-  gold: "Gold",
-  bitcoin: "Bitcoin (BTC)",
-  ethereum: "Ethereum (ETH)",
-  otherCrypto: "Other crypto",
-  other: "Other investable assets",
-};
-
-/** One line per kind, notes folded in, so the model sees the whole balance sheet in a glance. */
-function describeOutside(outside: OutsidePriced[], holdings: Holding[]): string {
-  if (outside.length === 0) return "None reported. The on-chain holdings above are the whole portfolio as far as we know.";
-  const onChain = holdings.reduce((s, h) => s + h.valueUsd, 0);
-  const total = outside.reduce((s, h) => s + h.valueUsd, 0);
-  const whole = onChain + total || 1;
-  const byKind = new Map<OutsideKind, OutsidePriced[]>();
-  for (const h of outside) byKind.set(h.kind, [...(byKind.get(h.kind) ?? []), h]);
-  const lines = [...byKind.entries()]
-    .map(([kind, items]) => ({ kind, items, value: items.reduce((s, h) => s + h.valueUsd, 0) }))
-    .sort((a, b) => b.value - a.value)
-    .map(({ kind, items, value }) => {
-      const stated = items.map((h) => `${formatAmount(h.amount, h.unit)}${h.note ? ` (${h.note})` : ""}`).join(", ");
-      return `- ${OUTSIDE_LABELS[kind]}: $${value.toFixed(0)} (${((value / whole) * 100).toFixed(1)}% of everything) — stated as ${stated}`;
-    });
-  return [
-    `Outside total: $${total.toFixed(0)}. Whole portfolio (on-chain + outside): $${whole.toFixed(0)}, of which on-chain $${onChain.toFixed(0)} (${((onChain / whole) * 100).toFixed(1)}%).`,
-    ...lines,
-  ].join("\n");
-}
-
-function describeMarket(m: MarketSnapshot): string {
-  const fmt = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
-  return [
-    `As of ${m.asOf}. Rule-based regime: ${m.regime} (score ${m.regimeScore} on -100..100).`,
-    m.fearGreed && `Fear & Greed index: ${m.fearGreed.value} (${m.fearGreed.label}).`,
-    m.btcDominance != null && `BTC dominance: ${m.btcDominance.toFixed(1)}%.`,
-    m.marketCapChange24h != null && `Total crypto market cap 24h change: ${fmt(m.marketCapChange24h)}.`,
-    ...m.assets.map(
-      (a) =>
-        `${a.symbol}: $${a.price.toFixed(2)}, 30d ${fmt(a.change30d)}, 90d ${fmt(a.change90d)}, vs 50d avg ${fmt(a.vsSma50)}, ` +
-        `vs 200d avg ${fmt(a.vsSma200)}, 30d annualized vol ${a.volatility30d.toFixed(0)}%, drawdown from 200d high ${fmt(a.drawdownFromHigh)}.`,
-    ),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-const SYSTEM = `You are the portfolio engine of a crypto app whose thesis is: "The best strategy for crypto is to hold, but are you holding the right assets?"
-You analyze a user's on-chain holdings and propose a target allocation that a long-term holder could rebalance into once and then mostly leave alone.
-
-Rules:
-- Reason through the lens of the selected investor's publicly known philosophy. You are inspired by them; never claim to be them or invent quotes.
-- Pick only from the investable universe given. Use canonical assets (BTC not WBTC, SOL not JitoSOL, GOLD not PAXG) and name the venue and exact instrument for each.
-- Choose venues to minimize friction: prefer a venue where the user already holds that asset or the stablecoins to fund it, so no bridging is needed. Override this when that venue's daily volume is too thin for the order (avoid orders above ~5% of 24h volume).
-- Stablecoins sitting on Hyperliquid can only be used there, short of a manual withdrawal, so they make a poor cash reserve: keep the reserve on ethereum-l2 or solana, where it can fund later swaps in-app, and spend Hyperliquid stablecoins on hyperliquid-spot in an asset the target holds (BTC as UBTC, ETH as UETH, SOL as USOL, GOLD as XAUT0, HYPE) when the volume allows. Do this by splitting that asset across venues: one allocation on hyperliquid-spot sized to the stablecoins already there, the rest wherever it is cheapest. It costs no extra sells; it only changes where each dollar lands.
-- This is a buy-and-hold app: own spot assets. Only if perps are allowed, use a 1x long perp where it clearly beats spot (spot too illiquid or unavailable, or a short horizon), state its annual funding cost in the rationale, and keep perps a minority of the portfolio.
-- Respect the user's risk tolerance and horizon; let current market conditions tilt the allocation (e.g. more stablecoins in euphoric or downtrending markets, more risk when fear is extreme and trend is turning up), but the persona's philosophy dominates.
-- Prefer fewer, larger positions over many tiny ones. Minimize unnecessary trades, since every swap costs fees and active trading rarely beats holding.
-- Percentages must sum to exactly 100.
-- Leveraged perp positions are exposure on top of the holdings (their margin is already inside the holdings). Account for them in the diagnosis, risk scores and risks, and say plainly whether the persona would keep, reduce or close them. Allocations cover holdings only; never allocate to perps.
-- Holdings outside the app (bank cash, brokerage, gold, coins on an exchange or in cold storage) cannot be moved here, but they are part of the user's wealth. When any are reported, judge the WHOLE portfolio and choose the on-chain targets so the whole balances: cash outside already does the stablecoin job, so do not pile stablecoins on-chain on top of a large cash position (keep only what the on-chain plan needs as dry powder); BTC or ETH held outside already is bitcoin or ether exposure, so size the on-chain BTC/ETH accordingly; stocks or index funds outside already are equity exposure, so tokenized stocks on-chain add little; gold outside already is the gold hedge. Conversely, if the user holds nothing defensive outside, the on-chain sleeve carries that job. Say this reasoning plainly in wholePicture, and let the diagnosis and risk scores describe the whole portfolio. The allocations still describe the on-chain portfolio only and still sum to 100 of it, because that is the only part that can be traded here.
-- Every allocation's rationale must say why this asset earns its place and why at that size; it is shown next to the trade that buys it. For every held asset you reduce or remove, give a trims entry saying why; it is shown next to the trade that sells it.
-- Be direct and specific. This is educational analysis, not personalized financial advice.`;
-
-const LANGUAGE_RULE: Record<Locale, string> = {
-  en: "Write every free-text field in English.",
-  zh: "Write every free-text field (verdict, diagnosis, marketView, personaTake, wholePicture, rationale, trims, risks, executionTips) in Simplified Chinese. Keep tickers, venue ids and instrument names exactly as given in the universe.",
-};
-
-/** Error texts the route maps to the user's language. */
-export type AdviceErrorCode = "modelDeclined" | "adviceCutOff" | "unexpectedFormat";
 export class AdviceError extends Error {
-  constructor(public readonly code: AdviceErrorCode) {
-    super(code);
+  constructor(
+    public readonly code: AdviceErrorCode,
+    message: string = code,
+  ) {
+    super(message);
   }
 }
 
-export async function generateAdvice(req: AdviceRequest): Promise<Advice> {
-  const client = new Anthropic();
-  const prompt = `Investor lens: ${req.persona.name}
-Philosophy: ${req.persona.philosophy}
+const headers = { authorization: `Bearer ${ADVISOR_TOKEN}`, "content-type": "application/json" };
 
-User risk tolerance: ${req.risk}
-User horizon: ${req.horizon}
-
-Current portfolio:
-${describePortfolio(req.holdings)}
-
-Open leveraged perp positions:
-${describePositions(req.positions, req.holdings)}
-
-Held outside the app (cannot be traded here; count it toward the whole picture):
-${describeOutside(req.outside, req.holdings)}
-
-Market conditions:
-${describeMarket(req.market)}
-
-Investable universe:
-${buildUniverse(req.venues, req.allowPerps)}
-
-Diagnose the current portfolio and propose the target allocation.`;
-
-  const response = await client.beta.messages.parse({
-    model: "claude-opus-5-5",
-    max_tokens: 16000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "high", format: betaZodOutputFormat(AdviceSchema) },
-    system: `${SYSTEM}\n- ${LANGUAGE_RULE[req.locale]}`,
-    messages: [{ role: "user", content: prompt }],
+/** The advisor's prompt version, refreshed every minute, so the cache key retires answers from an old prompt. */
+export function getPromptVersion(): Promise<number | "unknown"> {
+  return cached("advisor-version", 60_000, async () => {
+    try {
+      const res = await fetch(`${ADVISOR_URL}/api/advise`, { headers, signal: AbortSignal.timeout(5_000) });
+      const body = (await res.json()) as { promptVersion?: unknown };
+      return typeof body.promptVersion === "number" ? body.promptVersion : "unknown";
+    } catch {
+      return "unknown";
+    }
   });
-
-  if (response.stop_reason === "refusal") throw new AdviceError("modelDeclined");
-  if (response.stop_reason === "max_tokens") throw new AdviceError("adviceCutOff");
-  if (!response.parsed_output) throw new AdviceError("unexpectedFormat");
-  return normalize(response.parsed_output);
 }
 
-/** Guard against rounding drift so the target always sums to 100. */
-function normalize(advice: Advice): Advice {
-  const allocations = advice.allocations.filter((a) => a.targetPct > 0);
-  const sum = allocations.reduce((s, a) => s + a.targetPct, 0);
-  return {
-    ...advice,
-    allocations: allocations
-      .map((a) => ({ ...a, asset: a.asset.trim(), targetPct: (a.targetPct / sum) * 100 }))
-      .sort((a, b) => b.targetPct - a.targetPct),
-  };
+export async function requestAdvice(req: AdviceRequest): Promise<Advice> {
+  if (!advisorConfigured) throw new AdviceError("advisorNotConfigured");
+  let res: Response;
+  try {
+    res = await fetch(`${ADVISOR_URL}/api/advise`, { method: "POST", headers, body: JSON.stringify(req), signal: AbortSignal.timeout(290_000) });
+  } catch (e) {
+    throw new AdviceError("advisorError", e instanceof Error ? e.message : "advisor unreachable");
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = body as { error?: unknown; message?: unknown } | null;
+    const code = ADVISOR_CODES.find((c) => c === err?.error);
+    if (code) throw new AdviceError(code, typeof err?.message === "string" ? err.message : code);
+    throw new AdviceError("advisorError", `advisor responded ${res.status}`);
+  }
+  const parsed = AdviceResponseSchema.safeParse(body);
+  if (!parsed.success) throw new AdviceError("unexpectedFormat");
+  return parsed.data.advice;
 }

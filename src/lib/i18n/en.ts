@@ -79,7 +79,7 @@ export const en = {
   },
 
   risk: { conservative: "Conservative", balanced: "Balanced", aggressive: "Aggressive" },
-  horizon: { "under 1 year": "< 1 yr", "1-3 years": "1–3 yrs", "3+ years": "3+ yrs" },
+  cadence: { rarely: "Yearly or less", quarterly: "Every few months", monthly: "Monthly or more" },
   roles: { defensive: "defensive", core: "core", growth: "growth", speculative: "speculative" },
 
   /** `short` is how the lens is referred to in a sentence ("Think like Munger"). */
@@ -248,7 +248,7 @@ export const en = {
     titleTail: "…",
     intro: "Pick the mind that judges your book. The lens sets the target; your settings tune it.",
     riskTolerance: "Risk tolerance",
-    horizon: "Horizon",
+    cadence: "How often do you want to touch your portfolio?",
     allowPerpsToggle: "Allow 1x perpetual longs",
     allowPerps: "Allow perps",
     allowPerpsNote: "1x longs on Hyperliquid when spot is too thin. They pay ongoing funding fees.",
@@ -470,11 +470,12 @@ export const en = {
     verifyToRun: "Verify a wallet to run the advisor.",
     invalidRequest: "Invalid request.",
     unknownPersona: "Unknown investor persona.",
-    noApiKey: "Set ANTHROPIC_API_KEY in .env.local to enable the advisor.",
+    advisorNotConfigured: "Set ADVISOR_URL and ADVISOR_API_TOKEN in .env.local to enable the advisor.",
+    advisorError: (message: string) => `Advisor service error: ${message}`,
     globalLimit: "The advisor has reached today's global limit. It resets at midnight UTC.",
     walletLimit: (n: number) => `This wallet has used today's ${n} analyses. More tomorrow.`,
     ipLimit: (minutes: number) => `Too many analyses from your network. Try again in ${minutes} min.`,
-    badApiKey: "Missing or invalid ANTHROPIC_API_KEY on the server.",
+    badApiKey: "The advisor service has a missing or invalid ANTHROPIC_API_KEY.",
     claudeRateLimited: "Rate limited by the Claude API. Try again in a minute.",
     claudeError: (message: string) => `Claude API error: ${message}`,
     somethingWrong: "Something went wrong.",
