@@ -366,6 +366,7 @@ export default function Home() {
               onWallets={() => go("connect")}
               onAnalyze={() => go("analyze")}
               onFeedback={() => go("feedback")}
+              feedbackSent={waitlistSent !== null}
             />
             {verdict && (
               <div className="mt-[26px] max-w-[46em]">
