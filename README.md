@@ -25,6 +25,7 @@ Open http://localhost:3000.
 | EVM balances (ETH, Base, Arbitrum, Optimism, Polygon) | `src/lib/chains/evm.ts` | Public RPCs, one batched call per chain over a curated token list |
 | Bitcoin balance (address or xpub/ypub/zpub) | `src/lib/chains/bitcoin.ts` | mempool.space, Trezor Blockbook for xpubs |
 | Market regime | `src/lib/market.ts` | CoinGecko (200d BTC/ETH/SOL history, dominance) + Fear & Greed index |
+| PACFI v1.0 | `src/lib/pacfi.ts`, `src/app/api/pacfi/route.ts` | `mrmarket-labs/indicators` (`INDICATORS_URL`, `INDICATORS_API_TOKEN`), asked for `?version=v1.0`; served at `/api/pacfi` |
 | Allocation | `src/lib/advisor.ts` | Claude Opus 5.5, structured output validated with Zod |
 | Trades | `src/lib/rebalance.ts` | Deterministic diff of current vs target, ignoring moves under 1% |
 | Rebalance plan | `src/lib/plan.ts` | Pairs sells and buys per chain into direct swaps; stablecoin buys go wherever proceeds are; the rest is manual |
