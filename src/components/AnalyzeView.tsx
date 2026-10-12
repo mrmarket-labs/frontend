@@ -122,9 +122,13 @@ export function AnalyzeView({
             {advising ? <Spinner /> : <span className="font-mono">◴</span>}
             {advising ? t.analyze.thinking(lens) : t.analyze.testAnalysis(lens)}
           </button>
-          <button type="button" disabled title={t.analyze.comingSoon} className={`${BTN_TONAL} mt-2 h-[52px] w-full cursor-not-allowed opacity-50`}>
-            {t.analyze.proAnalysis} <span className="text-meta font-normal text-ink-2">· {t.analyze.comingSoon}</span>
-          </button>
+          {/* Pro is not open yet: a muted rainbow edge says it is coming, the tag says when. */}
+          <div className="mt-2 rounded-control p-px opacity-70 bg-[linear-gradient(90deg,#f87171,#fbbf24,#a3e635,#38bdf8,#a78bfa)]">
+            <button type="button" disabled title={t.analyze.comingSoon} className="flex h-[50px] w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-[inherit] bg-ground text-[15px] font-semibold">
+              <span className="bg-[linear-gradient(90deg,#f87171,#fbbf24,#a3e635,#38bdf8,#a78bfa)] bg-clip-text text-transparent">{t.analyze.proAnalysis}</span>
+              <span className="rounded-full bg-surface-control px-2 py-0.5 text-meta font-medium text-ink-2">{t.analyze.comingSoon}</span>
+            </button>
+          </div>
           <p className="mt-2.5 text-center text-meta text-ink-3">{advising ? t.analyze.takesTimeKeepOpen : t.analyze.takesTime}</p>
           {adviceError && <p role="alert" className="mt-2.5 text-center text-body text-risk">{adviceError}</p>}
           {!advising && (

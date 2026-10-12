@@ -365,7 +365,6 @@ export default function Home() {
               onMarkDone={(step) => markDone(step)}
               onWallets={() => go("connect")}
               onAnalyze={() => go("analyze")}
-              onSignals={() => go("signals")}
               onFeedback={() => go("feedback")}
             />
             {verdict && (

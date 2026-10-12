@@ -301,6 +301,7 @@ export const en = {
     nothingTail: "gets greedy enough to matter.",
     staysOnFile: "This verdict stays on file. Signals show when the market regime moves against it — never a price alert.",
     seeSignals: "See signals",
+    comingSoon: "Coming soon",
     ringLabel: (outer: string, inner: string) => `Two concentric rings. Outer ring is the target: ${outer}. Inner ring is today: ${inner}.`,
     percent: (n: string) => `${n} percent`,
     wholePicture: "The whole picture",

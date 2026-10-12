@@ -10,7 +10,7 @@ import type { Verdict } from "@/lib/verdict";
 import type { Progress } from "@/lib/wallets/progress";
 import type { WalletsApi } from "@/lib/wallets/useWallets";
 import { PlanView } from "./PlanView";
-import { BTN_PRIMARY, BTN_QUIET, PageHeader, Ring, SectionLabel, chartColor, pct, shortDate, sliceBy, usd } from "./ui";
+import { BTN_PRIMARY, BTN_QUIET, BTN_TONAL, PageHeader, Ring, SectionLabel, chartColor, pct, shortDate, sliceBy, usd } from "./ui";
 
 type Allocation = Advice["allocations"][number];
 
@@ -90,7 +90,7 @@ function Delta({ points, hold, pts }: { points: number; hold: string; pts: (sign
   return <div className={`text-meta ${points > 0 ? "text-accent" : "text-warn"}`}>{pts(`${points > 0 ? "+" : "−"}${Math.abs(points).toFixed(0)}`)}</div>;
 }
 
-export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, onWallets, onAnalyze, onSignals, onFeedback }: {
+export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, onWallets, onAnalyze, onFeedback }: {
   verdict: Verdict | null;
   wallets: WalletsApi;
   progress: Progress;
@@ -100,7 +100,6 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
   onWallets: () => void;
   /** Open the analyze page: the first read, or "Run again". */
   onAnalyze: () => void;
-  onSignals: () => void;
   /** The last step: what they thought, and the waitlist. */
   onFeedback: () => void;
 }) {
@@ -258,15 +257,21 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
         </div>
       </div>
 
-      <div className="mt-5 rounded-card bg-surface-live-2 px-4 py-[18px] lg:hidden">
-        <SectionLabel>{t.verdict.andAfterThat}</SectionLabel>
-        <h2 className="mt-2 font-display text-title leading-[1.12]">
-          {t.verdict.nothingLead} <span className="block italic text-accent">{t.verdict.nothingTail}</span>
-        </h2>
-        <p className="mt-2.5 text-label leading-normal text-accent-text">{t.verdict.staysOnFile}</p>
-        <button type="button" onClick={onSignals} className={`${BTN_PRIMARY} mt-3.5 h-12 w-full`}>
-          {t.verdict.seeSignals} <span className="font-mono">→</span>
-        </button>
+      {/* Signals are not open yet: the card stays as a preview of what follows, grayed out. */}
+      <div className="mt-5 rounded-card bg-surface px-4 py-[18px] lg:hidden">
+        <div className="flex items-center justify-between">
+          <SectionLabel>{t.verdict.andAfterThat}</SectionLabel>
+          <span className="rounded-full bg-surface-control px-2 py-0.5 text-meta text-ink-2">{t.verdict.comingSoon}</span>
+        </div>
+        <div className="opacity-50">
+          <h2 className="mt-2 font-display text-title leading-[1.12]">
+            {t.verdict.nothingLead} <span className="block italic text-accent">{t.verdict.nothingTail}</span>
+          </h2>
+          <p className="mt-2.5 text-label leading-normal text-ink-2">{t.verdict.staysOnFile}</p>
+          <button type="button" disabled title={t.verdict.comingSoon} className={`${BTN_TONAL} mt-3.5 h-12 w-full cursor-not-allowed`}>
+            {t.verdict.seeSignals} <span className="font-mono">→</span>
+          </button>
+        </div>
       </div>
 
     </div>

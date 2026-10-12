@@ -285,6 +285,7 @@ export const zh: Dict = {
     nothingTail: "贪婪到值得在意。",
     staysOnFile: "这份结论会保存下来。当市场状态转向不利时，信号会提示你——但从不是价格提醒。",
     seeSignals: "查看信号",
+    comingSoon: "即将推出",
     ringLabel: (outer: string, inner: string) => `两个同心环。外环为目标：${outer}。内环为现状：${inner}。`,
     percent: (n: string) => `${n}%`,
     wholePicture: "全貌",
