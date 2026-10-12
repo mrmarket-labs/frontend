@@ -335,7 +335,7 @@ export const en = {
     wouldActOptions: { yes: "Yes", no: "No", maybe: "Maybe" },
     trust: "What would make you trust it with a rebalance?",
     pickAny: "pick any",
-    trustOptions: { trackRecord: "A track record", clearerReasoning: "Clearer reasoning", backtests: "Backtests", editableTargets: "Editable targets", lowerFees: "Lower fees" },
+    trustOptions: { trackRecord: "A track record", clearerReasoning: "Clearer reasoning", backtests: "Backtests", editableTargets: "Editable targets", lowerFees: "Lower fees", askTheAgent: "The ability to talk back and forth with an AI agent about the decisions it made" },
     anythingElse: "Anything else?",
     anythingElsePlaceholder: "Assets you'd want covered, questions, anything…",
     submit: "Join the waitlist",

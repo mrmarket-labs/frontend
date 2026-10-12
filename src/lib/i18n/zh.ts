@@ -319,7 +319,7 @@ export const zh: Dict = {
     wouldActOptions: { yes: "会", no: "不会", maybe: "也许" },
     trust: "什么能让你放心交给它做再平衡？",
     pickAny: "可多选",
-    trustOptions: { trackRecord: "长期业绩记录", clearerReasoning: "更清晰的推理", backtests: "回测", editableTargets: "可调整的目标", lowerFees: "更低的费用" },
+    trustOptions: { trackRecord: "长期业绩记录", clearerReasoning: "更清晰的推理", backtests: "回测", editableTargets: "可调整的目标", lowerFees: "更低的费用", askTheAgent: "能和 AI 智能体来回讨论它做出的决定" },
     anythingElse: "还有什么？",
     anythingElsePlaceholder: "希望覆盖的资产、疑问、任何想法……",
     submit: "加入候补名单",
