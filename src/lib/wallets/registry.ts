@@ -36,6 +36,8 @@ const RDNS_KEYS: Record<string, string> = {
   "com.okex.wallet": "okx",
   "com.binance.wallet": "binance",
   "io.metamask": "metamask",
+  "com.coinbase.wallet": "coinbase",
+  "com.trustwallet.app": "trust",
 };
 
 /** "OKX Wallet" → "okx", "Binance Wallet" → "binance", "Phantom" → "phantom". */
@@ -132,7 +134,8 @@ function registerSolana(w: WsWallet) {
 /* Legacy Phantom-style Solana API: what wallet in-app browsers inject when they skip Wallet Standard. */
 interface LegacySolana {
   publicKey: { toString(): string } | null;
-  connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>;
+  /** Phantom-style wallets resolve with the key; Solflare resolves with a boolean and sets `publicKey`. */
+  connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey?: { toString(): string } } | boolean | void>;
   signTransaction(tx: VersionedTransaction): Promise<VersionedTransaction>;
   signMessage(message: Uint8Array, display?: "utf8" | "hex"): Promise<{ signature: Uint8Array }>;
 }
@@ -143,17 +146,21 @@ function wrapLegacySolana(name: string, get: () => LegacySolana | undefined): So
     if (!p) throw new AppError("unavailable", { name });
     return p;
   };
+  const connected = async (p: LegacySolana, opts?: { onlyIfTrusted?: boolean }) => {
+    const result = await p.connect(opts);
+    const key = (typeof result === "object" && result?.publicKey) || p.publicKey;
+    if (!key) throw new AppError("unavailable", { name });
+    return key.toString();
+  };
   const ensureAccount = async (address: string) => {
     const p = provider();
     if (p.publicKey?.toString() === address) return p;
-    const { publicKey } = await p.connect();
-    if (publicKey.toString() !== address) throw new AppError("differentAccount", { name, address: `${address.slice(0, 4)}…${address.slice(-4)}` });
+    if ((await connected(p)) !== address) throw new AppError("differentAccount", { name, address: `${address.slice(0, 4)}…${address.slice(-4)}` });
     return p;
   };
   return {
     async connect(silent = false) {
-      const { publicKey } = await provider().connect(silent ? { onlyIfTrusted: true } : undefined);
-      return [publicKey.toString()];
+      return [await connected(provider(), silent ? { onlyIfTrusted: true } : undefined)];
     },
     async signTransaction(tx, address) {
       const signed = await (await ensureAccount(address)).signTransaction(VersionedTransaction.deserialize(tx));
@@ -173,11 +180,32 @@ interface PhantomBitcoin {
 interface UnisatBitcoin {
   requestAccounts(): Promise<string[]>;
 }
+/** Xverse speaks sats-connect's JSON-RPC; Leather has its own `request`. */
+interface RpcBitcoin {
+  request(method: string, params?: unknown): Promise<{ result?: unknown; error?: { message?: string } }>;
+}
+interface InjectedEthereum extends Eip1193Provider {
+  isMetaMask?: boolean;
+  isPhantom?: boolean;
+  isOkxWallet?: boolean;
+  isBinance?: boolean;
+  isCoinbaseWallet?: boolean;
+  isTrust?: boolean;
+  isTrustWallet?: boolean;
+  isRabby?: boolean;
+  isBraveWallet?: boolean;
+}
 interface InjectedWindow {
-  ethereum?: Eip1193Provider & { isMetaMask?: boolean; isPhantom?: boolean; isOkxWallet?: boolean; isBinance?: boolean };
+  ethereum?: InjectedEthereum;
   phantom?: { solana?: LegacySolana & { isPhantom?: boolean }; ethereum?: Eip1193Provider; bitcoin?: PhantomBitcoin };
   okxwallet?: (Eip1193Provider & { solana?: LegacySolana; bitcoin?: UnisatBitcoin }) | undefined;
   binancew3w?: { ethereum?: Eip1193Provider; solana?: LegacySolana; bitcoin?: UnisatBitcoin };
+  trustwallet?: { ethereum?: Eip1193Provider; solana?: LegacySolana };
+  coinbaseSolana?: LegacySolana;
+  solflare?: LegacySolana & { isSolflare?: boolean };
+  unisat?: UnisatBitcoin;
+  XverseProviders?: { BitcoinProvider?: RpcBitcoin };
+  LeatherProvider?: RpcBitcoin;
 }
 const win = () => (typeof window === "undefined" ? ({} as InjectedWindow) : (window as unknown as InjectedWindow));
 
@@ -203,7 +231,30 @@ function bitcoinProviderFor(key: string): BitcoinProvider | undefined {
     };
   if (key === "okx") return unisatStyle(() => win().okxwallet?.bitcoin);
   if (key === "binance") return unisatStyle(() => win().binancew3w?.bitcoin);
+  if (key === "unisat") return unisatStyle(() => win().unisat);
+  if (key === "xverse" && w.XverseProviders?.BitcoinProvider)
+    return {
+      async requestAccounts() {
+        const res = await rpc(win().XverseProviders!.BitcoinProvider!, "getAccounts", { purposes: ["payment", "ordinals"] });
+        return (res as { address: string; purpose: string }[])
+          .filter((a) => a.purpose === "payment" || a.purpose === "ordinals")
+          .map((a) => ({ kind: "bitcoin", address: a.address.toLowerCase(), note: a.purpose as "payment" | "ordinals" }));
+      },
+    };
+  if (key === "leather" && w.LeatherProvider)
+    return {
+      async requestAccounts() {
+        const res = (await rpc(win().LeatherProvider!, "getAddresses")) as { addresses: { symbol?: string; address: string }[] };
+        return res.addresses.filter((a) => a.symbol === "BTC").map((a) => ({ kind: "bitcoin", address: a.address.toLowerCase(), note: btcNote(a.address) }));
+      },
+    };
   return undefined;
+}
+
+async function rpc(provider: RpcBitcoin, method: string, params?: unknown): Promise<unknown> {
+  const res = await provider.request(method, params);
+  if (res.error) throw new Error(res.error.message ?? `${method} failed`);
+  return res.result;
 }
 
 function start() {
@@ -252,12 +303,31 @@ function adoptLegacyGlobals() {
   legacy("okx", "OKX Wallet", "com.okex.wallet", w.okxwallet?.request ? w.okxwallet : undefined, () => win().okxwallet?.solana);
   legacy("binance", "Binance Wallet", "com.binance.wallet", w.binancew3w?.ethereum, () => win().binancew3w?.solana);
   legacy("phantom", "Phantom", "app.phantom", w.phantom?.ethereum, () => (win().phantom?.solana?.isPhantom ? win().phantom?.solana : undefined));
+  legacy("trust", "Trust Wallet", "com.trustwallet.app", w.trustwallet?.ethereum, () => win().trustwallet?.solana);
+  legacy("coinbase", "Coinbase Wallet", "com.coinbase.wallet", undefined, () => win().coinbaseSolana);
+  legacy("solflare", "Solflare", "com.solflare", undefined, () => (win().solflare?.isSolflare ? win().solflare : undefined));
+
+  // Bitcoin-only wallets announce nothing; `upsert` attaches their provider by key.
+  if (w.unisat && !wallets.get("unisat")?.bitcoin) upsert("unisat", { name: "UniSat Wallet" });
+  if (w.XverseProviders?.BitcoinProvider && !wallets.get("xverse")?.bitcoin) upsert("xverse", { name: "Xverse" });
+  if (w.LeatherProvider && !wallets.get("leather")?.bitcoin) upsert("leather", { name: "Leather" });
 
   const eth = w.ethereum;
   if (!eth || eth.isPhantom || eth.isOkxWallet || eth.isBinance) return;
   if ([...wallets.values()].some((x) => x.evm)) return;
-  const rdns = eth.isMetaMask ? "io.metamask" : "injected";
-  upsert(walletKey(eth.isMetaMask ? "MetaMask" : "Browser wallet", rdns), { name: eth.isMetaMask ? "MetaMask" : "Browser wallet", evm: { rdns, provider: eth } });
+  // Order matters: several wallets also set isMetaMask for compatibility.
+  const [name, rdns] = eth.isCoinbaseWallet
+    ? ["Coinbase Wallet", "com.coinbase.wallet"]
+    : eth.isTrust || eth.isTrustWallet
+      ? ["Trust Wallet", "com.trustwallet.app"]
+      : eth.isRabby
+        ? ["Rabby Wallet", "io.rabby"]
+        : eth.isBraveWallet
+          ? ["Brave Wallet", "com.brave.wallet"]
+          : eth.isMetaMask
+            ? ["MetaMask", "io.metamask"]
+            : ["Browser wallet", "injected"];
+  upsert(walletKey(name, rdns), { name, evm: { rdns, provider: eth } });
 }
 
 export function subscribeWallets(listener: () => void): () => void {

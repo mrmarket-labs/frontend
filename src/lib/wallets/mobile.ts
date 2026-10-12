@@ -5,7 +5,7 @@ export function isMobileBrowser(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 }
 
-export type MobileWalletId = "phantom" | "okx" | "binance" | "metamask";
+export type MobileWalletId = "phantom" | "okx" | "binance" | "metamask" | "coinbase" | "trust" | "solflare";
 /** `app` is a custom-scheme deep link that only works when the app is installed; `web` is the universal link. */
 export type WalletBrowserLinks = Record<MobileWalletId, { app?: string; web: string }>;
 
@@ -15,6 +15,9 @@ export const MOBILE_WALLETS: { id: MobileWalletId; label: string }[] = [
   { id: "okx", label: "OKX Wallet" },
   { id: "binance", label: "Binance Wallet" },
   { id: "metamask", label: "MetaMask" },
+  { id: "coinbase", label: "Coinbase Wallet" },
+  { id: "trust", label: "Trust Wallet" },
+  { id: "solflare", label: "Solflare" },
 ];
 
 /**
@@ -35,6 +38,10 @@ export function walletBrowserLinks(): WalletBrowserLinks {
     okx: { app: okxDeepLink, web: `https://www.okx.com/download?deeplink=${encodeURIComponent(okxDeepLink)}` },
     binance: { app: binanceDeepLink, web: `https://app.binance.com/en/download?_dp=${btoa(binanceDeepLink)}` },
     metamask: { web: `https://link.metamask.io/dapp/${host}${pathname}` },
+    coinbase: { web: `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(page)}` },
+    // coin_id 60 opens the browser on Ethereum; the page asks for Solana separately.
+    trust: { web: `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(page)}` },
+    solflare: { web: `https://solflare.com/ul/v1/browse/${encodeURIComponent(page)}?ref=${encodeURIComponent(origin)}` },
   };
 }
 
