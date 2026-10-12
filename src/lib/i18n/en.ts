@@ -102,6 +102,7 @@ export const en = {
       mvrv: { name: "MVRV Z-score over 5", fires: "above 5", crossed: "MVRV Z-score crossed 5" },
       dom: { name: "BTC dominance under 50%", fires: "below 50%", crossed: "BTC dominance fell under 50%" },
       fund: { name: "Perp funding hot for a week", fires: "above 30% APR", crossed: "Perp funding has run hot for a week" },
+      pacfi: { name: "PACFI in its frothy band", fires: "above 80", crossed: "PACFI entered its frothy band" },
     },
   },
 

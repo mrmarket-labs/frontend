@@ -92,6 +92,7 @@ export const zh: Dict = {
       mvrv: { name: "MVRV Z 值超过 5", fires: "高于 5", crossed: "MVRV Z 值突破 5" },
       dom: { name: "BTC 市占率低于 50%", fires: "低于 50%", crossed: "BTC 市占率跌破 50%" },
       fund: { name: "永续资金费率连续一周偏高", fires: "年化高于 30%", crossed: "永续资金费率已连续一周偏高" },
+      pacfi: { name: "PACFI 处于过热区间", fires: "高于 80", crossed: "PACFI 进入过热区间" },
     },
   },
 

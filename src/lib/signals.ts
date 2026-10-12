@@ -1,4 +1,4 @@
-export type SignalId = "berk" | "cape" | "fng" | "w200" | "mvrv" | "dom" | "fund";
+export type SignalId = "berk" | "cape" | "fng" | "w200" | "mvrv" | "dom" | "fund" | "pacfi";
 
 export type SignalStatus = "fired" | "close" | "quiet" | "unavailable";
 
@@ -26,6 +26,7 @@ export const SIGNALS: SignalDef[] = [
   { id: "mvrv", group: "crypto", name: "MVRV Z-score over 5", fires: "above 5", crossed: "MVRV Z-score crossed 5", defaultOn: true },
   { id: "dom", group: "crypto", name: "BTC dominance under 50%", fires: "below 50%", crossed: "BTC dominance fell under 50%", defaultOn: false },
   { id: "fund", group: "crypto", name: "Perp funding hot for a week", fires: "above 30% APR", crossed: "Perp funding has run hot for a week", defaultOn: false },
+  { id: "pacfi", group: "crypto", name: "PACFI in its frothy band", fires: "above 80", crossed: "PACFI entered its frothy band", defaultOn: true },
 ];
 
 export interface SignalReading {

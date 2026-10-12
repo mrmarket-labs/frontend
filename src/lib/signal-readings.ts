@@ -1,5 +1,6 @@
 import { cached, getJson } from "./http";
 import { getMarketSnapshot } from "./market";
+import { getPacfi } from "./pacfi";
 import { SIGNALS, type FiredEvent, type SignalId, type SignalReading, type SignalsResponse, type SignalStatus } from "./signals";
 import type { MarketSnapshot } from "./types";
 
@@ -13,6 +14,12 @@ const DOMINANCE_LINE = 50;
 const SMA_WEEKS = 200;
 const SIGMA_LINE = 2;
 const FUNDING_LINE_APR = 30;
+/** PACFI's 0–100 score is its percentile in its own history; above 80 is the "Frothy" band. */
+const PACFI_LINE = 80;
+/** Like Fear & Greed, it lingers around the line; it re-arms once it has fallen back this far. */
+const PACFI_REARM = 70;
+/** Days of PACFI history before a percentile is reported, as indicators does. */
+const PACFI_MIN_DAYS = 365;
 /** "Close" is within a tenth of the threshold. */
 const NEAR = 0.1;
 
@@ -103,6 +110,42 @@ async function funding(): Promise<Feed> {
   return { now: `${apr < 0 ? "−" : ""}${Math.abs(apr).toFixed(0)}%`, status: above(apr, FUNDING_LINE_APR) };
 }
 
+/**
+ * PACFI v1.0 (mrmarket-labs/indicators) as its 0–100 score: each day's percentile among the readings
+ * up to and including that day, recomputed here from the daily history the indicators serve.
+ */
+async function pacfi(): Promise<Feed> {
+  const { history } = await getPacfi();
+  const seen: number[] = [];
+  const scored: { date: string; score: number }[] = [];
+  for (const day of history) {
+    if (!Number.isFinite(day.pacfi)) continue;
+    // Binary insertion keeps `seen` sorted; the rank is how many readings so far are at or below today's.
+    let lo = 0;
+    let hi = seen.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (seen[mid] <= day.pacfi) lo = mid + 1;
+      else hi = mid;
+    }
+    seen.splice(lo, 0, day.pacfi);
+    if (seen.length >= PACFI_MIN_DAYS) scored.push({ date: day.date, score: (100 * lo) / seen.length });
+  }
+  const latest = scored.at(-1);
+  if (!latest) throw new Error("Not enough PACFI history.");
+
+  const fired: string[] = [];
+  let armed = true;
+  for (const p of scored) {
+    if (p.score > PACFI_LINE) {
+      if (armed) fired.push(p.date);
+      armed = false;
+    } else if (p.score <= PACFI_REARM) armed = true;
+  }
+  const status = above(latest.score, PACFI_LINE);
+  return { now: latest.score.toFixed(0), status, firedAt: status === "fired" ? fired.at(-1) : undefined, history: fired };
+}
+
 export function getSignals(): Promise<SignalsResponse> {
   return cached("signals", TTL_MS, async () => {
     const snapshot = await getMarketSnapshot().catch(() => null);
@@ -112,6 +155,7 @@ export function getSignals(): Promise<SignalsResponse> {
       dom: () => dominance(snapshot),
       w200: twoHundredWeek,
       fund: funding,
+      pacfi,
     };
 
     // One feed being down must not take the others with it.
