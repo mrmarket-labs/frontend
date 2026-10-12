@@ -194,11 +194,11 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
           <h1 className="font-display text-display leading-[1.02] tracking-[-0.2px] lg:text-hero-lg">{t.connect.heroLine1}</h1>
           <p className="mt-1 font-display text-display leading-[1.02] text-accent italic lg:text-hero-lg">{t.connect.heroLine2}</p>
           <p className="mt-4 max-w-[34em] text-body leading-normal text-ink-2">{t.connect.intro}</p>
-          <div className="mt-6 max-w-[34em] rounded-card bg-surface p-4">
+          <div className="mt-6 max-w-[34em] rounded-card bg-surface-live-2 p-4">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-live px-2.5 py-1 text-meta text-accent-text">● {t.connect.earlyAccess}</span>
             <h2 className="mt-2.5 font-display text-title leading-[1.1]">{t.connect.waitlistTitle}</h2>
-            <p className="mt-1.5 text-label leading-normal text-ink-2">{t.connect.waitlistIntro}</p>
-            <button type="button" onClick={tryFirst} className={`${BTN_TONAL} mt-3 h-tap px-4`}>
+            <p className="mt-1.5 text-label leading-normal text-accent-text">{t.connect.waitlistIntro}</p>
+            <button type="button" onClick={tryFirst} className={`${BTN_PRIMARY} mt-3.5 h-12 px-5`}>
               {t.connect.tryFirst} <span className="font-mono">→</span>
             </button>
           </div>
