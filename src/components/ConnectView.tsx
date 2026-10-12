@@ -8,6 +8,7 @@ import type { Wallet, WalletAddress } from "@/lib/wallets/types";
 import { sameAddress, shortAddress } from "@/lib/wallets/types";
 import { MOBILE_WALLETS, openInWallet } from "@/lib/wallets/mobile";
 import { chainsOf, type DiscoveredWallet } from "@/lib/wallets/registry";
+import { WALLETCONNECT_KEY } from "@/lib/wallets/walletconnect";
 import type { WalletsApi } from "@/lib/wallets/useWallets";
 import { LanguageSwitch } from "./LanguageSwitch";
 import { BTN_PRIMARY, BTN_TONAL, SectionLabel, Spinner, WalletMark, usd } from "./ui";
@@ -126,9 +127,11 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
 
   /** "Solana · Ethereum · Bitcoin in one connection", in the current language. */
   const speaks = (w: DiscoveredWallet) =>
-    t.connect.chainsOf(
-      chainsOf(w).map((c) => (c === "solana" ? t.chains.solana : c === "evm" ? t.chains.ethereum : c === "evm-only" ? t.connect.evmFull : t.chains.bitcoin)),
-    );
+    w.key === WALLETCONNECT_KEY
+      ? t.connect.walletConnect
+      : t.connect.chainsOf(
+          chainsOf(w).map((c) => (c === "solana" ? t.chains.solana : c === "evm" ? t.chains.ethereum : c === "evm-only" ? t.connect.evmFull : t.chains.bitcoin)),
+        );
 
   async function connect(key: string, name: string) {
     setConnecting(true);
@@ -161,7 +164,8 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
   }
 
   const connected = api.wallets.filter((w) => w.mode === "connected");
-  const noExtensions = api.available.length === 0;
+  // WalletConnect is always listed; it doesn't mean anything is installed in this browser.
+  const noExtensions = api.available.every((w) => w.key === WALLETCONNECT_KEY);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[440px] flex-1 flex-col lg:grid lg:max-w-[1040px] lg:grid-cols-[minmax(0,1fr)_440px] lg:content-center lg:items-center lg:gap-x-gap-col lg:px-gutter-lg lg:py-11">

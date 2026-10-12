@@ -159,6 +159,7 @@ export const en = {
     /** What a discovered wallet speaks, under its name in the picker. */
     chainsOf: (parts: string[]) => (parts.length > 1 ? `${parts.join(" · ")} in one connection` : parts[0] ?? ""),
     evmFull: "Ethereum, L2s and Hyperliquid",
+    walletConnect: "Any phone wallet, by QR code · Ethereum and L2s",
     mobileChains: {
       phantom: "Solana · Ethereum · Bitcoin in one connection",
       okx: "Solana · Ethereum · Bitcoin in one connection",

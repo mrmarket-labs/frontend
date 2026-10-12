@@ -1,6 +1,7 @@
 import { VersionedTransaction } from "@solana/web3.js";
 import { AppError } from "../i18n";
 import type { Eip1193Provider, WalletAddress } from "./types";
+import { WALLETCONNECT_KEY, walletConnectEnabled, walletConnectProvider } from "./walletconnect";
 
 /**
  * One entry per installed wallet, whatever chains it speaks. Phantom, OKX Wallet, Binance Wallet
@@ -286,6 +287,9 @@ function start() {
     }),
   );
 
+  // Always offered when configured: it reaches a wallet on another device, whatever is installed here.
+  if (walletConnectEnabled()) upsert(WALLETCONNECT_KEY, { name: "WalletConnect", evm: { rdns: WALLETCONNECT_KEY, provider: walletConnectProvider } });
+
   // Some wallet in-app browsers (mostly on phones) only inject their legacy globals, and not
   // always before we mount. Give the announcements a beat, then fall back to those, a few times.
   for (const delay of [400, 1500, 3000]) setTimeout(adoptLegacyGlobals, delay);
@@ -314,7 +318,7 @@ function adoptLegacyGlobals() {
 
   const eth = w.ethereum;
   if (!eth || eth.isPhantom || eth.isOkxWallet || eth.isBinance) return;
-  if ([...wallets.values()].some((x) => x.evm)) return;
+  if ([...wallets.values()].some((x) => x.evm && x.key !== WALLETCONNECT_KEY)) return;
   // Order matters: several wallets also set isMetaMask for compatibility.
   const [name, rdns] = eth.isCoinbaseWallet
     ? ["Coinbase Wallet", "com.coinbase.wallet"]
@@ -336,13 +340,14 @@ export function subscribeWallets(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
-/** Multi-chain wallets first, then alphabetical, so Phantom / OKX / Binance lead the picker. */
+/** Multi-chain wallets first, then alphabetical, so Phantom / OKX / Binance lead the picker; WalletConnect last. */
 export function getWallets(): DiscoveredWallet[] {
   start();
   // Whoever injects after our timed checks is caught the next time the list is refreshed.
   adoptLegacyGlobals();
   const chains = (w: DiscoveredWallet) => Number(Boolean(w.evm)) + Number(Boolean(w.solana)) + Number(Boolean(w.bitcoin));
-  return [...wallets.values()].sort((a, b) => chains(b) - chains(a) || a.name.localeCompare(b.name));
+  const last = (w: DiscoveredWallet) => Number(w.key === WALLETCONNECT_KEY);
+  return [...wallets.values()].sort((a, b) => last(a) - last(b) || chains(b) - chains(a) || a.name.localeCompare(b.name));
 }
 
 /** Accepts the current key or the legacy persisted forms ("eip6963:<rdns>"). */

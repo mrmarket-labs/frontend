@@ -147,6 +147,7 @@ export const zh: Dict = {
     freeNote: "查看不花钱，也不需要签名。",
     chainsOf: (parts: string[]) => (parts.length > 1 ? `一次连接：${parts.join(" · ")}` : parts[0] ?? ""),
     evmFull: "以太坊、L2 和 Hyperliquid",
+    walletConnect: "扫码连接任意手机钱包 · 以太坊和 L2",
     mobileChains: {
       phantom: "一次连接：Solana · 以太坊 · 比特币",
       okx: "一次连接：Solana · 以太坊 · 比特币",

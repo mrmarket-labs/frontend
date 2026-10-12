@@ -5,6 +5,7 @@ import { AppError } from "../i18n";
 import { isMobileBrowser, walletBrowserLinks, type WalletBrowserLinks } from "./mobile";
 import { connectWallet, getWallet, getWallets, subscribeWallets, type DiscoveredWallet } from "./registry";
 import { loadWallets, saveWallets, watchedWallet } from "./store";
+import { WALLETCONNECT_KEY, disconnectWalletConnect } from "./walletconnect";
 import { detectKind, normalizeAddress, sameAddress, type Wallet, type WalletAddress } from "./types";
 
 /** Attach addresses to a connected wallet, absorbing any watched entries for the same addresses. */
@@ -140,7 +141,13 @@ export function useWallets() {
   );
 
   const rename = useCallback((id: string, label: string) => setWallets((p) => p.map((w) => (w.id === id ? { ...w, label } : w))), [setWallets]);
-  const remove = useCallback((id: string) => setWallets((p) => p.filter((w) => w.id !== id)), [setWallets]);
+  const remove = useCallback(
+    (id: string) => {
+      if (wallets.some((w) => w.id === id && w.provider === WALLETCONNECT_KEY)) disconnectWalletConnect().catch(() => undefined);
+      setWallets((p) => p.filter((w) => w.id !== id));
+    },
+    [wallets, setWallets],
+  );
 
   const walletFor = useCallback(
     (address: string) => wallets.find((w) => w.addresses.some((a) => sameAddress(a.address, address))),
