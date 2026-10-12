@@ -193,7 +193,10 @@ export function ConnectView({ api, holdings, scanned, scanning, scanError, onSca
           <div className="px-gutter pt-8 lg:px-0 lg:pt-0">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-live px-2.5 py-1 text-meta text-accent-text">● {t.connect.earlyAccess}</span>
             <h2 className="mt-2.5 font-display text-title leading-[1.1]">{t.connect.waitlistTitle}</h2>
-            <p className="mt-1.5 max-w-[34em] text-label leading-normal text-ink-2">{t.connect.waitlistIntro}</p>
+            <p className="mt-1.5 max-w-[34em] text-label leading-normal text-ink-2">
+              <span className="bg-[linear-gradient(90deg,#f87171,#fbbf24,#a3e635,#38bdf8,#a78bfa)] bg-clip-text font-semibold text-transparent">{t.connect.waitlistLead}</span>{" "}
+              {t.connect.waitlistIntro}
+            </p>
           </div>
         )}
         <div className={`mx-gutter flex flex-1 flex-col rounded-card bg-surface p-4 lg:mx-0 lg:min-h-[420px] ${scanned ? "mt-7 lg:mt-0" : "mt-4"}`}>
