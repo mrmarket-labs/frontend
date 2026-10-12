@@ -15,7 +15,7 @@ function Chip({ on, onClick, disabled, children }: { on: boolean; onClick: () =>
       aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      className={`h-10 rounded-control border px-3.5 text-label font-medium transition-colors ${on ? "border-live bg-surface-live text-ink" : "border-hairline bg-transparent text-ink-2 hover:text-ink"}`}
+      className={`min-h-10 rounded-control border px-3.5 py-2 text-label font-medium transition-colors ${on ? "border-live bg-surface-live text-ink" : "border-hairline bg-transparent text-ink-2 hover:text-ink"}`}
     >
       {children}
     </button>

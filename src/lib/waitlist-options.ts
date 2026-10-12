@@ -2,7 +2,7 @@
 export const WOULD_ACT = ["yes", "no", "maybe"] as const;
 export type WouldAct = (typeof WOULD_ACT)[number];
 
-export const TRUST = ["trackRecord", "clearerReasoning", "backtests", "editableTargets", "lowerFees"] as const;
+export const TRUST = ["trackRecord", "clearerReasoning", "backtests", "editableTargets", "lowerFees", "askTheAgent"] as const;
 export type Trust = (typeof TRUST)[number];
 
 export const MAX_SHORT = 120;

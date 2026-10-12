@@ -5,7 +5,7 @@ import { dict, localeFromRequest } from "@/lib/i18n";
 import { CADENCES, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
 import { readSession } from "@/lib/auth";
-import { cacheGet, cacheSet, clientIp, hit, today, tooMany } from "@/lib/limits";
+import { FOREVER, cacheGet, cacheSet, clientIp, hit, today, tooMany, unhit } from "@/lib/limits";
 import { MAX_NOTE_LENGTH, MAX_OUTSIDE, OUTSIDE_KINDS, UNITS, type OutsidePriced } from "@/lib/outside";
 import { computeTrades } from "@/lib/rebalance";
 import type { Category } from "@/lib/types";
@@ -14,6 +14,8 @@ export const maxDuration = 300;
 
 const ADVICE_PER_HOUR = Number(process.env.ADVICE_PER_HOUR || 10);
 const ADVICE_PER_WALLET_DAY = Number(process.env.ADVICE_PER_WALLET_DAY || 10);
+/** Test analyses a wallet gets, ever; after that, the waitlist for Pro. */
+const ADVICE_PER_WALLET_TOTAL = Number(process.env.ADVICE_PER_WALLET_TOTAL || 3);
 /** Hard ceiling on daily advisor spend, whatever an attacker does. */
 const ADVICE_DAILY_CAP = Number(process.env.ADVICE_DAILY_CAP || 300);
 const CACHE_TTL_SEC = 3600;
@@ -145,8 +147,19 @@ export async function POST(request: Request) {
       return Response.json({ error: t.globalLimit, code: "cap" }, { status: 503 });
     if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
     if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
+    // Counted last, so a run turned away by the limits above doesn't use up a test analysis.
+    const totalKey = `adv:wallet:${session.address}:total`;
+    const total = await hit(totalKey, ADVICE_PER_WALLET_TOTAL, FOREVER);
+    if (!total.ok) return Response.json({ error: t.testRunsUsed(ADVICE_PER_WALLET_TOTAL), code: "used" }, { status: 429 });
 
-    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, locale, tier: TIER });
+    let advice;
+    try {
+      advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, locale, tier: TIER });
+    } catch (e) {
+      // A run that never produced advice shouldn't cost one of the few the wallet gets.
+      await unhit(totalKey).catch(() => undefined);
+      throw e;
+    }
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice) });
   } catch (e) {

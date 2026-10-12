@@ -39,7 +39,7 @@ function Segmented<T extends string>({ label, options, names, value, onChange, d
 export function AnalyzeView({
   personaId, risk, cadence, allowPerps, onPersona, onRisk, onCadence, onPerps,
   session, signableWallets, signingIn, signInError, onVerify, onSignOut, onWallets,
-  outside, onOutside, canAdvise, advising, adviceError, onAdvise,
+  outside, onOutside, canAdvise, advising, adviceError, onAdvise, onWaitlist,
 }: {
   personaId: string;
   risk: RiskLevel;
@@ -63,6 +63,8 @@ export function AnalyzeView({
   advising: boolean;
   adviceError: string | null;
   onAdvise: () => void;
+  /** Set once the wallet's test analyses are used up: the way on is the waitlist. */
+  onWaitlist?: () => void;
 }) {
   const t = useT();
   const persona = PERSONAS.find((p) => p.id === personaId) ?? PERSONAS[0];
@@ -131,6 +133,11 @@ export function AnalyzeView({
           </div>
           <p className="mt-2.5 text-center text-meta text-ink-3">{advising ? t.analyze.takesTimeKeepOpen : t.analyze.takesTime}</p>
           {adviceError && <p role="alert" className="mt-2.5 text-center text-body text-risk">{adviceError}</p>}
+          {onWaitlist && (
+            <button type="button" onClick={onWaitlist} className={`${BTN_TONAL} mt-2.5 h-12 w-full`}>
+              {t.verdict.feedbackCta} <span className="font-mono">→</span>
+            </button>
+          )}
           {!advising && (
             <p className="mt-2.5 text-center text-meta text-ink-3">
               {t.analyze.verifiedAs} <span className="num">{shortAddress(session.address)}</span> ·{" "}
