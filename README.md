@@ -3,8 +3,8 @@
 > The best strategy for crypto is to hold. But are you holding the right assets?
 
 Connect Phantom (Solana, Ethereum and Bitcoin in one go) or any EVM wallet, or just watch addresses.
-Invest Like Buffett reads your balances, scores current market conditions, and asks Claude to propose a target
-allocation through the lens of an investor philosophy (Munger, Buffett, Dalio, Taleb, Bogle, Cathie Wood).
+Invest Like Buffett reads your balances and asks the private advisor service to propose a target allocation
+through the lens of an investor philosophy (Munger, Buffett, Dalio, Taleb, Bogle, Cathie Wood).
 It then turns the difference into a rebalance plan of same-chain swaps you sign in your own wallet.
 
 ## Run it
@@ -24,7 +24,6 @@ Open http://localhost:3000.
 | Solana balances (SOL, SPL + Token-2022, incl. xStocks) | `src/lib/chains/solana.ts` | Solana RPC + Jupiter token API (price, tags, verification, liquidity) |
 | EVM balances (ETH, Base, Arbitrum, Optimism, Polygon) | `src/lib/chains/evm.ts` | Public RPCs, one batched call per chain over a curated token list |
 | Bitcoin balance (address or xpub/ypub/zpub) | `src/lib/chains/bitcoin.ts` | mempool.space, Trezor Blockbook for xpubs |
-| Market regime | `src/lib/market.ts` | CoinGecko (200d BTC/ETH/SOL history, dominance) + Fear & Greed index |
 | PACFI v1.0 | `src/lib/pacfi.ts`, `src/app/api/pacfi/route.ts` | `mrmarket-labs/indicators` (`INDICATORS_URL`, `INDICATORS_API_TOKEN`), asked for `?version=v1.0`; served at `/api/pacfi` |
 | Allocation | `src/lib/advisor.ts` | Client for the private advisor service (`mrmarket-labs/advisor`), which owns the prompt and calls Claude Opus 5.5; the response is validated here with Zod |
 | Trades | `src/lib/rebalance.ts` | Deterministic diff of current vs target, ignoring moves under 1% |
@@ -52,7 +51,7 @@ funds: every swap is a transaction or order the user signs in their own wallet.
   approves the rate once with a signature, then each order carries it. Leave it unset to charge no fee there;
   Hyperliquid only pays builders whose account holds at least 100 USDC and rejects orders naming any other.
 
-The prompt, the investable universe and the persona lenses live in the private `mrmarket-labs/advisor` repo; this site sends it the portfolio, the market read and the chosen lens, and renders the answer. Locally, run that repo's `npm run dev` and point `ADVISOR_URL` at `http://localhost:3001`.
+The prompt, the investable universe and the persona lenses live in the private `mrmarket-labs/advisor` repo; this site sends it the portfolio and the chosen lens, and renders the answer. The market read happens there too. Locally, run that repo's `npm run dev` and point `ADVISOR_URL` at `http://localhost:3001`.
 
 ## Abuse protection
 

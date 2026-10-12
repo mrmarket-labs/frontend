@@ -59,29 +59,3 @@ export interface PortfolioResponse {
   errors: ScanError[];
   totalUsd: number;
 }
-
-export interface AssetTrend {
-  symbol: string;
-  price: number;
-  change30d: number;
-  change90d: number;
-  vsSma50: number;
-  vsSma200: number;
-  volatility30d: number;
-  drawdownFromHigh: number;
-}
-
-export type Regime = "risk-on" | "neutral" | "risk-off";
-
-export interface MarketSnapshot {
-  asOf: string;
-  regime: Regime;
-  regimeScore: number;
-  fearGreed: { value: number; label: string } | null;
-  btcDominance: number | null;
-  totalMarketCapUsd: number | null;
-  marketCapChange24h: number | null;
-  assets: AssetTrend[];
-  notes: string[];
-}
-

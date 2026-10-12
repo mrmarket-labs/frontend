@@ -128,7 +128,7 @@ export function VerdictView({ verdict, wallets, progress, onReview, onMarkDone, 
   const inner = sliceBy(holdings, (h) => h.category, (h) => h.valueUsd, t.chart);
   const describe = (slices: typeof outer) => slices.map((s) => `${s.label} ${t.verdict.percent(s.pct.toFixed(0))}`).join(", ");
   const ringLabel = t.verdict.ringLabel(describe(outer), describe(inner));
-  // Claude wrote the prose in the language of the day; the chrome around it follows the switch.
+  // The advisor wrote the prose in the language of the day; the chrome around it follows the switch.
   const otherLanguage = (verdict.locale ?? "en") !== locale;
 
   return (
