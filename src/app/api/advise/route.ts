@@ -3,7 +3,7 @@ import { AdviceError, advisorConfigured, getPromptVersion, requestAdvice } from 
 import { CATEGORY_LABELS } from "@/lib/classify";
 import { dict, localeFromRequest } from "@/lib/i18n";
 import { getMarketSnapshot } from "@/lib/market";
-import { HORIZONS, RISK_LEVELS } from "@/lib/options";
+import { CADENCES, RISK_LEVELS } from "@/lib/options";
 import { getPersona } from "@/lib/personas";
 import { readSession } from "@/lib/auth";
 import { cacheGet, cacheSet, clientIp, hit, today, tooMany } from "@/lib/limits";
@@ -46,7 +46,7 @@ async function adviceCacheKey(
 const RequestSchema = z.object({
   personaId: z.string(),
   risk: z.enum(RISK_LEVELS),
-  horizon: z.enum(HORIZONS),
+  cadence: z.enum(CADENCES),
   allowPerps: z.boolean().default(false),
   holdings: z
     .array(
@@ -122,14 +122,14 @@ export async function POST(request: Request) {
 
   const parsed = RequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: t.invalidRequest }, { status: 400 });
-  const { personaId, risk, horizon, allowPerps, holdings, positions, outside } = parsed.data;
+  const { personaId, risk, cadence, allowPerps, holdings, positions, outside } = parsed.data;
   if (!getPersona(personaId)) return Response.json({ error: t.unknownPersona }, { status: 400 });
 
   if (!advisorConfigured) return Response.json({ error: t.advisorNotConfigured }, { status: 500 });
 
   try {
     const [market, promptVersion] = await Promise.all([getMarketSnapshot(), getPromptVersion()]);
-    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, horizon, allowPerps, locale }, market.regime, promptVersion);
+    const cacheKey = await adviceCacheKey(holdings, outside, { personaId, risk, cadence, allowPerps, locale }, market.regime, promptVersion);
     const cached = await cacheGet<Awaited<ReturnType<typeof requestAdvice>>>(cacheKey);
     if (cached) return Response.json({ advice: cached, trades: computeTrades(holdings, cached), market, cached: true });
 
@@ -145,7 +145,7 @@ export async function POST(request: Request) {
     if (!perWallet.ok) return tooMany(t.walletLimit(ADVICE_PER_WALLET_DAY), perWallet.retryAfterSec);
     if (!perIp.ok) return tooMany(t.ipLimit(Math.ceil(perIp.retryAfterSec / 60)), perIp.retryAfterSec);
 
-    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, horizon, allowPerps, market, locale });
+    const advice = await requestAdvice({ personaId, holdings, positions, outside, risk, cadence, allowPerps, market, locale });
     await cacheSet(cacheKey, advice, CACHE_TTL_SEC);
     return Response.json({ advice, trades: computeTrades(holdings, advice), market });
   } catch (e) {

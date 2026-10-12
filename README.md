@@ -63,7 +63,7 @@ Every advisor run costs real money (Claude), so `/api/advise` is gated:
   (`AUTH_SECRET`). Throwaway wallets can't farm the endpoint because empty ones are refused.
 - **Quotas**: a global daily cap (`ADVICE_DAILY_CAP`, the hard ceiling on spend), per-wallet per day
   (`ADVICE_PER_WALLET_DAY`) and per-IP per hour. Portfolio scans and swap quotes are rate limited too.
-- **Cache**: identical questions (same portfolio shape, persona, risk, horizon, market regime) are served
+- **Cache**: identical questions (same portfolio shape, persona, risk, cadence, market regime) are served
   from a one-hour cache and don't count against quotas.
 - Counters live in Upstash Redis (`UPSTASH_REDIS_REST_URL/TOKEN`, add via the Vercel marketplace). Without it
   the app still works but limits are per serverless instance, which is not real protection.

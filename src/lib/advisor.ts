@@ -2,7 +2,7 @@ import { z } from "zod/v4";
 import { CATEGORY_LABELS } from "./classify";
 import { cached } from "./http";
 import type { Locale } from "./i18n";
-import { VENUES, type Horizon, type RiskLevel } from "./options";
+import { VENUES, type Cadence, type RiskLevel } from "./options";
 import type { OutsidePriced } from "./outside";
 import type { Category, Holding, MarketSnapshot, PerpPosition } from "./types";
 
@@ -55,7 +55,8 @@ export interface AdviceRequest {
   /** Money the app cannot move, priced in dollars at the time of the read. */
   outside: OutsidePriced[];
   risk: RiskLevel;
-  horizon: Horizon;
+  /** How often the user wants to touch the portfolio. */
+  cadence: Cadence;
   allowPerps: boolean;
   market: MarketSnapshot;
   /** Language for every free-text field; tickers and venue ids stay as given. */

@@ -70,7 +70,7 @@ export const zh: Dict = {
   },
 
   risk: { conservative: "保守", balanced: "平衡", aggressive: "进取" },
-  horizon: { "under 1 year": "1 年内", "1-3 years": "1–3 年", "3+ years": "3 年以上" },
+  cadence: { rarely: "一年一次或更少", quarterly: "每几个月", monthly: "每月或更频繁" },
   roles: { defensive: "防御", core: "核心", growth: "增长", speculative: "投机" },
 
   personas: {
@@ -232,7 +232,7 @@ export const zh: Dict = {
     titleTail: "…",
     intro: "选一位来审视你的持仓。视角决定目标，你的设置做微调。",
     riskTolerance: "风险承受度",
-    horizon: "持有期限",
+    cadence: "你想多久打理一次持仓？",
     allowPerpsToggle: "允许 1 倍永续多单",
     allowPerps: "允许永续合约",
     allowPerpsNote: "现货流动性不足时，在 Hyperliquid 开 1 倍多单。需要持续支付资金费。",
