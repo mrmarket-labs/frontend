@@ -260,6 +260,12 @@ export default function Home() {
     const next: Progress = { ...progress, [step.id]: { status: "done", txId, manual: step.kind === "manual", at: Date.now() } };
     setProgress(next);
     saveProgress(next);
+    track("trade_executed", {
+      kind: step.kind,
+      chain: step.kind === "swap" ? step.chain : "none",
+      persona: verdict?.personaId ?? "unknown",
+      cadence: verdict?.cadence ?? "unknown",
+    });
     if (step.kind === "swap") void scan();
   }
 
