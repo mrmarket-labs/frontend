@@ -21,6 +21,7 @@ import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
 import type { Trade } from "@/lib/rebalance";
 import type { PortfolioResponse } from "@/lib/types";
 import { loadVerdict, saveVerdict, type Verdict } from "@/lib/verdict";
+import { track } from "@/lib/analytics";
 import { loadWaitlistSent, saveWaitlistSent, sizeBucket, type FeedbackForm } from "@/lib/waitlist-options";
 import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progress";
 import { getSession, signIn, signOut, signableAddress, type SessionInfo } from "@/lib/wallets/signin";
@@ -187,6 +188,7 @@ export default function Home() {
     setSignInError(null);
     try {
       setSession(await signIn(wallet, portfolio?.holdings ?? []));
+      track("signed_in");
     } catch (e) {
       const msg = errorMessage(e, t);
       setSignInError(/reject|denied|cancel/i.test(msg) ? t.analyze.signatureCancelled : msg);
@@ -224,6 +226,7 @@ export default function Home() {
       };
       setVerdict(next);
       saveVerdict(next);
+      track("analysis_completed", { persona: personaId, risk, cadence });
       // A fresh plan starts from zero.
       setProgress({});
       saveProgress({});
@@ -256,6 +259,7 @@ export default function Home() {
     const sent = { email: form.email.trim().toLowerCase(), at: Date.now() };
     saveWaitlistSent(sent);
     setWaitlistSent(sent.email);
+    track("waitlist_joined", { would_act: form.wouldAct ?? "unanswered" });
   }
 
   const reviewWallet = review ? wallets.walletFor(review.address) : undefined;
