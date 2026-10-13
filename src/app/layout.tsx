@@ -1,10 +1,10 @@
-import { GoogleAnalytics } from "@next/third-parties/google";
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Instrument_Serif, Space_Grotesk } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, dict, isLocale, localeFromAcceptLanguage, type Locale } from "@/lib/i18n";
 import { LocaleProvider } from "@/lib/i18n/context";
 import { GA_ID } from "@/lib/analytics";
+import { Analytics } from "@/components/Analytics";
 import "./globals.css";
 
 const sans = Space_Grotesk({ variable: "--font-space-grotesk", subsets: ["latin"] });
@@ -28,9 +28,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang={dict(locale).htmlLang} className={`${sans.variable} ${mono.variable} ${serif.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <LocaleProvider initial={locale}>{children}</LocaleProvider>
+        <LocaleProvider initial={locale}>
+          {children}
+          {GA_ID && <Analytics gaId={GA_ID} />}
+        </LocaleProvider>
       </body>
-      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
     </html>
   );
 }
