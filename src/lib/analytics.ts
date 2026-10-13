@@ -7,7 +7,7 @@ export const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
  * The funnel steps worth counting. The page is one route with views, so page views alone
  * would show nothing past the landing. Never send addresses, emails or amounts.
  */
-export type AnalyticsEvent = "wallet_connected" | "address_watched" | "signed_in" | "analysis_completed" | "waitlist_joined";
+export type AnalyticsEvent = "wallet_connected" | "address_watched" | "signed_in" | "analysis_completed" | "waitlist_joined" | "trade_executed";
 
 /* --- Consent ----------------------------------------------------------------
    GA sets cookies, so it loads only after the visitor says yes, and the answer can be changed
