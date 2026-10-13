@@ -27,6 +27,14 @@ export const zh: Dict = {
     fullDate: (d: Date) => d.toLocaleDateString("zh-CN", { day: "numeric", month: "short", year: "numeric" }),
   },
 
+  consent: {
+    title: "允许匿名统计访问吗？",
+    body: "经你同意后，我们会使用 Google Analytics Cookie 了解访客走到了哪一步，不涉及你的钱包或持仓。拒绝则不会加载任何统计。",
+    accept: "允许",
+    decline: "不用了",
+    settings: "Cookie 设置",
+  },
+
   legal:
     "Invest Like Buffett 读取公开的链上余额和市场数据，生成仅供参考的资产配置思路。兑换通过 Jupiter 和 0x 路由，并在你自己的钱包中签名；" +
     "Invest Like Buffett 对兑换收取 0.5% 费用，从不保管你的资金。投资者视角仅受其公开阐述的投资理念启发，与本人无关，也未获其认可。" +

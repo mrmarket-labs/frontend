@@ -21,7 +21,7 @@ import { compilePlan, type Step, type SwapStep } from "@/lib/plan";
 import type { Trade } from "@/lib/rebalance";
 import type { PortfolioResponse } from "@/lib/types";
 import { loadVerdict, saveVerdict, type Verdict } from "@/lib/verdict";
-import { track } from "@/lib/analytics";
+import { GA_ID, openConsent, track } from "@/lib/analytics";
 import { loadWaitlistSent, saveWaitlistSent, sizeBucket, type FeedbackForm } from "@/lib/waitlist-options";
 import { loadProgress, saveProgress, type Progress } from "@/lib/wallets/progress";
 import { getSession, signIn, signOut, signableAddress, type SessionInfo } from "@/lib/wallets/signin";
@@ -46,7 +46,19 @@ async function postJson<T>(url: string, body: unknown, fallback: (status: number
 
 function LegalNote() {
   const { t } = useLocale();
-  return <p className="text-meta leading-relaxed text-ink-4">{t.legal}</p>;
+  return (
+    <p className="text-meta leading-relaxed text-ink-4">
+      {t.legal}
+      {GA_ID && (
+        <>
+          {" "}
+          <button type="button" onClick={openConsent} className="underline underline-offset-2 hover:text-ink-3">
+            {t.consent.settings}
+          </button>
+        </>
+      )}
+    </p>
+  );
 }
 
 export default function Home() {

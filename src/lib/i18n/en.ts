@@ -34,6 +34,14 @@ export const en = {
     fullDate: (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
   },
 
+  consent: {
+    title: "Count visits anonymously?",
+    body: "With your OK we use Google Analytics cookies to see which steps people reach, nothing about your wallets or holdings. Say no and nothing is loaded.",
+    accept: "Allow",
+    decline: "No thanks",
+    settings: "Cookie settings",
+  },
+
   legal:
     "Invest Like Buffett analyzes public on-chain balances and market data to produce educational allocation ideas. Swaps are routed through Jupiter and 0x and " +
     "signed in your own wallet; Invest Like Buffett charges a 0.5% fee on them and never holds your funds. Investor lenses are inspired by publicly known " +
